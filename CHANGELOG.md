@@ -2,6 +2,11 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v1.1 — 2026-11-04
+
+- Web App URL set in `assets/js/config.js` using the standard `/macros/s/…/exec` form instead of the domain-scoped `/a/macros/sr.edu.sa/s/…/exec` form, which redirects to a Google sign-in page and fails when called from GitHub Pages.
+- Version bumped to 1.1 (shown in header and footer).
+
 ## v1.0 — 2026-11-04
 
 First release.

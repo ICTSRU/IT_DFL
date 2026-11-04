@@ -1,9 +1,9 @@
 /* ICTD Digital File Library — front-end settings. Edit this file only. */
 window.ICTD_LIB_CONFIG = {
-  VERSION: "1.0",
+  VERSION: "1.1",
 
   // 1) Apps Script Web App URL (Deploy > Manage deployments > Web app URL, ends with /exec)
-  WEB_APP_URL: "PASTE_APPS_SCRIPT_WEB_APP_URL_HERE",
+  WEB_APP_URL: "https://script.google.com/macros/s/AKfycbwd5bCOgpH3bN3LfjYKx5G582LjtlBZ519kc3alzaTMiZVCTl6cfyBYqqmM_WfJHEOofA/exec",
 
   // 2) Google OAuth Web Client ID (same value as ClientID in the Config sheet)
   GOOGLE_CLIENT_ID: "PASTE_OAUTH_CLIENT_ID.apps.googleusercontent.com",
