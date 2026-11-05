@@ -1,6 +1,6 @@
 /**
  * ICTD Digital File Library — Google Apps Script backend
- * Version 1.7 (2026-11-05)
+ * Version 1.8 (2026-11-05)
  *
  * Container-bound script: create a Google Sheet, open Extensions > Apps Script,
  * paste this file as Code.gs (and appsscript.json), run setup() once, then deploy as a Web app.
@@ -12,7 +12,7 @@
  *                 then the user is looked up in AllowedUsers (Admin / Editor / Viewer).
  */
 
-var VERSION = '1.7';
+var VERSION = '1.8';
 
 /**
  * Paste your OAuth Web Client ID here. setup() / finishSetup() write it into the
@@ -607,6 +607,7 @@ function onOpen() {
     .addItem('Run setup (first time)', 'setup')
     .addItem('Finish / repair setup (Client ID + make me Admin)', 'finishSetup')
     .addItem('Re-home storage into STORAGE_FOLDER_ID', 'rebuildStorage')
+    .addItem('Import ICTD policies (25 PDFs) into Policies', 'importPolicies')
     .addItem('Show deployment checklist', 'showChecklist')
     .addToUi();
 }
@@ -794,6 +795,89 @@ function rebuildStorage() {
       '- Already in place (kept): ' + kept + '\n' +
       '- Files moved: ' + moved + '\n\n' +
       'New uploads now land in this folder. Any leftover empty folders in the previous location can be deleted manually.';
+    try { SpreadsheetApp.getUi().alert('ICTD Digital File Library', msg, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) { console.log(msg); }
+    return msg;
+  });
+}
+
+/**
+ * One-time import of the 25 ICTD policy PDFs (rendered from the Policy platform, finalized, dated
+ * Nov 2026) into the Policies drawer under a "ICTD Policies" folder, and index each in Documents.
+ * PDFs are fetched from the public repo; re-running is idempotent (skips any policy code already present).
+ */
+var POLICY_PDF_BASE = 'https://raw.githubusercontent.com/ICTSRU/IT_DFL/main/policy-pdfs/';
+var POLICY_LIST = [
+  {code:"ICTD-01P",file:"ICTD-01P.pdf",titleAr:"سياسة البريد الإلكتروني الجامعي",titleEn:"University Email Policy",version:"13.0",owner:"Mohamed Nawaz"},
+  {code:"ICTD-02P",file:"ICTD-02P.pdf",titleAr:"سياسة حسابات البريد الإلكتروني للخريجين",titleEn:"Alumni Email Accounts Policy",version:"3.0",owner:"Mohamed Nawaz"},
+  {code:"ICTD-03P",file:"ICTD-03P.pdf",titleAr:"سياسة أجهزة الحاسب الآلي وملحقاتها",titleEn:"Computer Equipment and Peripherals Policy",version:"13.0",owner:"Mohamed Omar"},
+  {code:"ICTD-05P",file:"ICTD-05P.pdf",titleAr:"سياسة حقوق نسخ البرمجيات",titleEn:"Software Copyright and Licensing Policy",version:"12.0",owner:"Mohamed Saleh"},
+  {code:"ICTD-06P",file:"ICTD-06P.pdf",titleAr:"سياسة إدارة التغيير في تقنية المعلومات",titleEn:"IT Change Management Policy",version:"12.0",owner:"Mohamed ElMahdy"},
+  {code:"ICTD-07P",file:"ICTD-07P.pdf",titleAr:"سياسة كلمات السر",titleEn:"Password Policy",version:"12.0",owner:"Mohamed Nawaz"},
+  {code:"ICTD-08P",file:"ICTD-08P.pdf",titleAr:"سياسة النسخ الاحتياطي والاستعادة",titleEn:"Backup and Restore Policy",version:"12.0",owner:"Mohamed Omar"},
+  {code:"ICTD-09P",file:"ICTD-09P.pdf",titleAr:"سياسة مركز البيانات وغرف الخوادم",titleEn:"Data Center and Server Room Policy",version:"12.0",owner:"Mohamed Nawaz"},
+  {code:"ICTD-10P",file:"ICTD-10P.pdf",titleAr:"سياسة حلول الطباعة",titleEn:"Printing Solutions Policy",version:"12.0",owner:"Mohamed Omar"},
+  {code:"ICTD-11P",file:"ICTD-11P.pdf",titleAr:"سياسة قواعد السلوك",titleEn:"IT Code of Conduct Policy",version:"12.0",owner:"Mohamed ElMahdy"},
+  {code:"ICTD-12P",file:"ICTD-12P.pdf",titleAr:"سياسة تقييم الاحتياجات التقنية",titleEn:"IT Needs Assessment Policy",version:"12.0",owner:"Mohamed Omar"},
+  {code:"ICTD-13P",file:"ICTD-13P.pdf",titleAr:"سياسة استخدام اجتماعات Zoom",titleEn:"Zoom Meetings Usage Policy",version:"10.0",owner:"Mohamed Omar"},
+  {code:"ICTD-14P",file:"ICTD-14P.pdf",titleAr:"سياسة مشاركة الملفات",titleEn:"File Sharing Policy",version:"12.0",owner:"Mohamed Omar"},
+  {code:"ICTD-15P",file:"ICTD-15P.pdf",titleAr:"سياسة الوصول الخارجي لموارد الجامعة",titleEn:"External Remote Access Policy",version:"12.0",owner:"Mohamed Omar"},
+  {code:"ICTD-16P",file:"ICTD-16P.pdf",titleAr:"سياسة حسابات التعليم الإلكتروني",titleEn:"E-Learning Accounts Policy",version:"12.1",owner:"Mohamed Saleh"},
+  {code:"ICTD-17P",file:"ICTD-17P.pdf",titleAr:"سياسة التشغيل الآمن للويب",titleEn:"Secure Web Gateway Policy",version:"12.0",owner:"Mohamed Nawaz"},
+  {code:"ICTD-18P",file:"ICTD-18P.pdf",titleAr:"سياسة تحرير الموقع الإلكتروني",titleEn:"Website Content Editing Policy",version:"12.0",owner:"Mohamed Saleh"},
+  {code:"ICTD-19P",file:"ICTD-19P.pdf",titleAr:"سياسة إدارة المخاطر",titleEn:"IT Risk Management Policy",version:"12.0",owner:"Mohamed ElMahdy"},
+  {code:"ICTD-20P",file:"ICTD-20P.pdf",titleAr:"السياسة العامة للنظم والمعلومات للطلاب والطالبات",titleEn:"General IT Systems Policy for Students",version:"12.0",owner:"Mohamed Saleh"},
+  {code:"ICTD-04P",file:"ICTD-04P.pdf",titleAr:"سياسة استخدام الشبكات والإنترنت",titleEn:"Network and Internet Acceptable Use Policy",version:"11.0",owner:"Mohamed Nawaz"},
+  {code:"ICTD-21P",file:"ICTD-21P.pdf",titleAr:"سياسة توزيع الشاشات",titleEn:"Display Screens Allocation Policy",version:"4.0",owner:"Mohamed Omar"},
+  {code:"ICTD-22P",file:"ICTD-22P.pdf",titleAr:"سياسة نظام المراسلات الإدارية",titleEn:"Administrative Correspondence System Policy",version:"2.0",owner:"Mohamed Saleh"},
+  {code:"ICTD-23P",file:"ICTD-23P.pdf",titleAr:"سياسة استخدام أدوات التواصل الاجتماعي",titleEn:"Social Media Use Policy",version:"2.0",owner:"Mohamed Nawaz"},
+  {code:"ICTD-24P",file:"ICTD-24P.pdf",titleAr:"سياسة الأمن السيبراني",titleEn:"Cybersecurity Policy",version:"2.0",owner:"Mohamed Nawaz"},
+  {code:"ICTD-025P",file:"ICTD-025P.pdf",titleAr:"سياسة الاستخدام العادل والتحكم في الوصول إلى الإنترنت",titleEn:"Fair Use and Internet Access Control Policy",version:"1.3",owner:"Mohamed Nawaz"}
+];
+
+function importPolicies() {
+  var me = (Session.getEffectiveUser().getEmail() || Session.getActiveUser().getEmail() || 'import').toLowerCase();
+  return withLock_(function () {
+    var drawer = readAll_(SHEETS.DRAWERS).filter(function (d) { return d.NameEn === 'Policies' || d.NameAr === 'السياسات'; })[0];
+    if (!drawer) throw err_('NOT_FOUND', 'Policies drawer not found — run setup() first.');
+    var folder = readAll_(SHEETS.FOLDERS).filter(function (f) { return f.DrawerID === drawer.DrawerID && (f.NameEn === 'ICTD Policies'); })[0];
+    var drawerDrive = ensureDriveFolder_(drawer, SHEETS.DRAWERS, ensureRoot_(), label_(drawer));
+    if (!folder) {
+      var fid = nextId_('FLD');
+      var ff = drawerDrive.createFolder('ICTD Policies');
+      appendObj_(SHEETS.FOLDERS, { FolderID: fid, DrawerID: drawer.DrawerID, NameAr: 'سياسات الإدارة', NameEn: 'ICTD Policies',
+        Order: readAll_(SHEETS.FOLDERS).filter(function (f) { return f.DrawerID === drawer.DrawerID; }).length + 1, Active: true,
+        DriveFolderID: ff.getId(), CreatedBy: me, CreatedAt: safe_(stamp_().date) });
+      folder = { FolderID: fid, DrawerID: drawer.DrawerID, DriveFolderID: ff.getId() };
+    }
+    var dest = DriveApp.getFolderById(folder.DriveFolderID);
+    var have = {};
+    readAll_(SHEETS.DOCS).forEach(function (d) { String(d.Tags || '').split(',').forEach(function (t) { have[t.trim().toUpperCase()] = true; }); });
+    var added = 0, skipped = 0, failed = [];
+    POLICY_LIST.forEach(function (p) {
+      if (have[p.code.toUpperCase()]) { skipped++; return; }
+      try {
+        var res = UrlFetchApp.fetch(POLICY_PDF_BASE + p.file, { muteHttpExceptions: true });
+        if (res.getResponseCode() !== 200) { failed.push(p.code + ' (http ' + res.getResponseCode() + ')'); return; }
+        var blob = res.getBlob().setName(p.code + ' ' + p.titleAr + ' v' + p.version + '.pdf');
+        var bytes = blob.getBytes();
+        if (String.fromCharCode.apply(null, bytes.slice(0, 5).map(function (b) { return (b + 256) % 256; })) !== '%PDF-') { failed.push(p.code + ' (not pdf)'); return; }
+        var file = dest.createFile(blob);
+        var id = nextId_('DOC'), s = stamp_();
+        appendObj_(SHEETS.DOCS, {
+          DocID: id, Title: safe_(p.titleAr), DrawerID: drawer.DrawerID, FolderID: folder.FolderID, DocDate: safe_('2026-11-05'),
+          Owner: safe_(p.owner), OwnerEmail: '', Tags: safe_(p.code + ', سياسة, policy'), Description: safe_(p.titleEn),
+          Version: safe_(p.version), Status: 'Active', Confidentiality: 'Internal', FileName: safe_(file.getName()),
+          MimeType: 'application/pdf', SizeBytes: bytes.length, DriveFileID: file.getId(), DriveURL: file.getUrl(),
+          CreatedBy: me, CreatedAt: safe_(s.date + ' ' + s.time), UpdatedBy: '', UpdatedAt: '', Deleted: false
+        });
+        added++;
+      } catch (e) { failed.push(p.code + ' (' + e + ')'); }
+    });
+    CacheService.getScriptCache().remove('cfg_v1');
+    log_({ email: me, name: 'import', role: 'Admin' }, 'import_policies', 'added ' + added + ' skipped ' + skipped + ' failed ' + failed.length);
+    var msg = 'ICTD policies import finished.\n- Added: ' + added + '\n- Already present (skipped): ' + skipped +
+      '\n- Failed: ' + failed.length + (failed.length ? '\n  ' + failed.join('\n  ') : '') +
+      '\n\nThey are in Policies ▸ ICTD Policies, and listed in the library.';
     try { SpreadsheetApp.getUi().alert('ICTD Digital File Library', msg, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) { console.log(msg); }
     return msg;
   });

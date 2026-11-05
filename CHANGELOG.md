@@ -2,6 +2,11 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v1.8 — 2026-11-05
+
+- Added the 25 ICTD policy PDFs (rendered from the Policy platform's own layout, marked معتمدة/Approved and dated 5 Nov 2026) under policy-pdfs/, and an importPolicies() backend function + menu item that imports them into the Policies drawer ("ICTD Policies" folder) and indexes each in the Documents sheet. Idempotent (skips policies already present).
+- Version bumped to 1.8.
+
 ## v1.7 — 2026-11-05
 
 - Cabinet interface switched from vertical stacked drawers to a horizontal layout: the drawers now sit side by side as pull-out columns (lateral file cabinet), wrapping responsively, with the cabinet summary and recently-added panels moved below.
