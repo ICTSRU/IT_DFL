@@ -205,6 +205,7 @@
     return '<div class="band sru-tech-bg"><div class="band-inner"><div class="app-mark">' + icon('archive') + '</div>' +
       '<div><h1>' + esc(t('appName')) + ' <span class="ver">v' + esc(CFG.VERSION) + '</span></h1><div class="sub">' + esc(t('appSub')) + '</div></div>' +
       '<div class="band-actions">' + (u ? '<span class="chip">' + icon('user') + '<bdi>' + esc(u.name) + '</bdi> · ' + esc(t('role_' + u.role)) + '</span>' : '') +
+      (u && isAdmin() ? '<button class="btn ghost" data-act="admin-users">' + icon('shield-check') + esc(t('manageAccess')) + '</button>' : '') +
       '<button class="btn ghost" data-act="lang">' + icon('languages') + esc(t('lang')) + '</button>' +
       (u ? '<button class="btn ghost" data-act="signout">' + icon('log-out') + esc(t('signOut')) + '</button>' : '') + '</div></div></div>';
   }
@@ -628,7 +629,67 @@
   var qTimer = null;
 
   /* ---------------- actions ---------------- */
+  /* ---------------- access management (Admin) ---------------- */
+  var ADMIN_ME = '';
+  function roleOptions(sel) {
+    return [['Admin', 'roleAdminFull'], ['Editor', 'roleEditorAdd'], ['Viewer', 'roleViewerView']]
+      .map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === sel ? ' selected' : '') + '>' + esc(t(o[1])) + '</option>'; }).join('');
+  }
+  function openAdminUsers() {
+    modal(t('accessPanel'),
+      '<div class="err" id="m-err" role="alert"></div><div id="users-body" class="userwrap"><div class="empty">' + icon('loader-circle', 'spin') + ' ' + esc(t('loading')) + '</div></div>',
+      '<button class="btn secondary" data-act="close-modal">' + esc(t('close')) + '</button>', { sticky: true, focus: false });
+    loadUsers();
+  }
+  function loadUsers() {
+    api('listUsers', {}).then(function (d) { ADMIN_ME = d.me; renderUsers(d.users); })
+      .catch(function (e) { var b = $('#m-err'); handleErr(e, b); });
+  }
+  function renderUsers(list) {
+    var body = $('#users-body'); if (!body) return;
+    var rows = list.map(function (x) {
+      var self = x.email === ADMIN_ME;
+      return '<tr data-email="' + esc(x.email) + '"><td data-l="' + esc(t('colEmail2')) + '"><span class="latin">' + esc(x.email) + '</span>' + (self ? ' <span class="chip">' + esc(t('role_Admin')) + '</span>' : '') + '</td>' +
+        '<td data-l="' + esc(t('colName')) + '"><input class="in u-name" value="' + esc(x.name) + '" maxlength="120"></td>' +
+        '<td data-l="' + esc(t('colRole')) + '"><select class="in u-role"' + (self ? ' disabled' : '') + '>' + roleOptions(x.role) + '</select></td>' +
+        '<td data-l="' + esc(t('colActive')) + '" style="text-align:center"><input type="checkbox" class="u-active"' + (x.active ? ' checked' : '') + (self ? ' disabled' : '') + '></td>' +
+        '<td class="actions"><button class="icon-btn" data-act="save-user" aria-label="' + esc(t('save')) + '" title="' + esc(t('save')) + '">' + icon('check') + '</button>' +
+        (self ? '' : '<button class="icon-btn danger" data-act="del-user" aria-label="' + esc(t('del')) + '" title="' + esc(t('del')) + '">' + icon('trash-2') + '</button>') + '</td></tr>';
+    }).join('');
+    body.innerHTML =
+      '<div class="adduser"><input class="in latin" id="nu-email" placeholder="' + esc(t('emailPh')) + '"><input class="in" id="nu-name" placeholder="' + esc(t('namePh')) + '"><select class="in" id="nu-role">' + roleOptions('Viewer') + '</select><button class="btn" data-act="add-user">' + icon('plus') + esc(t('addUser')) + '</button></div>' +
+      '<p class="hint" style="margin:0 0 12px">' + esc(t('roleHelp')) + '</p>' +
+      (list.length ? '<div class="tbl-wrap"><table class="docs utbl"><thead><tr><th class="nosort">' + esc(t('colEmail2')) + '</th><th class="nosort">' + esc(t('colName')) + '</th><th class="nosort">' + esc(t('colRole')) + '</th><th class="nosort">' + esc(t('colActive')) + '</th><th class="nosort">' + esc(t('colActions')) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">' + esc(t('noUsers')) + '</div>');
+  }
+  function saveUserCall(payload, btn) {
+    var box = $('#m-err'); if (box) box.textContent = '';
+    if (btn) btn.disabled = true;
+    api('saveUser', payload).then(function (d) { ADMIN_ME = d.me; renderUsers(d.users); toast(t('userSaved')); })
+      .catch(function (e) { if (btn) btn.disabled = false; handleErr(e, $('#m-err')); });
+  }
+  function confirmRemoveUser(email) {
+    modal(t('del'), '<p><b class="latin">' + esc(email) + '</b></p><p>' + esc(t('confirmRemoveUser')) + '</p><div class="err" id="m-err"></div>',
+      '<button class="btn secondary" data-act="admin-users">' + esc(t('cancel')) + '</button><button class="btn danger" id="m-deluser" data-act="do-del-user" data-email="' + esc(email) + '">' + icon('trash-2') + esc(t('confirm')) + '</button>', { cls: 'sm', focus: false });
+  }
+
   var ACT = {
+    'admin-users': openAdminUsers,
+    'add-user': function () {
+      var email = $('#nu-email').value.trim(), name = $('#nu-name').value.trim(), role = $('#nu-role').value;
+      if (!email) { $('#m-err').textContent = t('errRequired'); return; }
+      saveUserCall({ email: email, name: name, role: role, active: true });
+    },
+    'save-user': function (el) {
+      var tr = el.closest('tr'); if (!tr) return;
+      saveUserCall({ email: tr.getAttribute('data-email'), name: $('.u-name', tr).value.trim(), role: $('.u-role', tr).value, active: $('.u-active', tr).checked }, el);
+    },
+    'del-user': function (el) { var tr = el.closest('tr'); if (tr) confirmRemoveUser(tr.getAttribute('data-email')); },
+    'do-del-user': function (el) {
+      el.disabled = true;
+      api('deleteUser', { email: el.getAttribute('data-email') }).then(function () { toast(t('userRemoved')); openAdminUsers(); })
+        .catch(function (e) { el.disabled = false; handleErr(e, $('#m-err')); });
+    },
     'lang': function () { S.lang = S.lang === 'ar' ? 'en' : 'ar'; store('ictd_lib_lang', S.lang); closeModal(); if (S.user) { renderApp(); renderView(); } else renderLogin(); },
     'signout': function () { signOut(); },
     'open-drawer': function (el) { el.classList.add('opening'); var id = el.getAttribute('data-id'); setTimeout(function () { go('#/d/' + id); }, 200); },

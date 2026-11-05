@@ -1,6 +1,6 @@
 /**
  * ICTD Digital File Library — Google Apps Script backend
- * Version 1.8 (2026-11-05)
+ * Version 1.9 (2026-11-05)
  *
  * Container-bound script: create a Google Sheet, open Extensions > Apps Script,
  * paste this file as Code.gs (and appsscript.json), run setup() once, then deploy as a Web app.
@@ -12,7 +12,7 @@
  *                 then the user is looked up in AllowedUsers (Admin / Editor / Viewer).
  */
 
-var VERSION = '1.8';
+var VERSION = '1.9';
 
 /**
  * Paste your OAuth Web Client ID here. setup() / finishSetup() write it into the
@@ -111,7 +111,10 @@ var ACTIONS = {
   addDocument: addDocument_,
   updateDocument: updateDocument_,
   deleteDocument: deleteDocument_,
-  openDocument: openDocument_
+  openDocument: openDocument_,
+  listUsers: listUsers_,
+  saveUser: saveUser_,
+  deleteUser: deleteUser_
 };
 
 /* ------------------------------------------------------------------ *
@@ -596,6 +599,70 @@ function openDocument_(u, p) {
   var granted = grantViewer_(String(d.DriveFileID || ''), u.email);
   log_(u, 'open', d.DocID + ' ' + d.Title);
   return { url: d.DriveURL, granted: granted };
+}
+
+/* ------------------------------------------------------------------ *
+ *  Access management (Admin only) — AllowedUsers
+ * ------------------------------------------------------------------ */
+
+function usersOut_() {
+  return readAll_(SHEETS.USERS).filter(function (r) { return String(r.Email).trim(); }).map(function (r) {
+    return { email: String(r.Email).toLowerCase().trim(), name: r.Name || '',
+      role: ROLES.indexOf(String(r.Role)) >= 0 ? String(r.Role) : 'Viewer', active: bool_(r.Active), addedAt: r.AddedAt || '' };
+  }).sort(function (a, b) { return a.email.localeCompare(b.email); });
+}
+
+function listUsers_(u) {
+  need_(isAdmin_(u), 'Only administrators can manage access.');
+  return { users: usersOut_(), me: u.email };
+}
+
+function validEmail_(e) {
+  e = String(e || '').toLowerCase().trim();
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) ? e : '';
+}
+function activeAdminsExcept_(all, email) {
+  return all.filter(function (r) {
+    return String(r.Role) === 'Admin' && bool_(r.Active) && String(r.Email).toLowerCase().trim() !== email;
+  });
+}
+
+function saveUser_(u, p) {
+  need_(isAdmin_(u), 'Only administrators can manage access.');
+  var email = validEmail_(p.email);
+  if (!email) throw err_('VALIDATION', 'Please enter a valid e-mail address.');
+  var role = ROLES.indexOf(p.role) >= 0 ? p.role : 'Viewer';
+  var active = p.active === undefined ? true : !!p.active;
+  return withLock_(function () {
+    var all = readAll_(SHEETS.USERS);
+    var rec = all.filter(function (r) { return String(r.Email).toLowerCase().trim() === email; })[0];
+    if (email === u.email && (role !== 'Admin' || !active)) throw err_('FORBIDDEN', 'You cannot change your own administrator access.');
+    if (rec && String(rec.Role) === 'Admin' && bool_(rec.Active) && (role !== 'Admin' || !active) && !activeAdminsExcept_(all, email).length)
+      throw err_('FORBIDDEN', 'At least one active administrator must remain.');
+    if (rec) {
+      updateRow_(SHEETS.USERS, rec._row, { Name: safe_(p.name !== undefined ? p.name : rec.Name, 120), Role: role, Active: active });
+    } else {
+      appendObj_(SHEETS.USERS, { Email: email, Name: safe_(p.name || '', 120), Role: role, Active: active, AddedAt: safe_(stamp_().date) });
+    }
+    log_(u, 'save_user', email + ' → ' + role + (active ? '' : ' (inactive)'));
+    return { users: usersOut_(), me: u.email };
+  });
+}
+
+function deleteUser_(u, p) {
+  need_(isAdmin_(u), 'Only administrators can manage access.');
+  var email = validEmail_(p.email);
+  return withLock_(function () {
+    var all = readAll_(SHEETS.USERS);
+    var rec = all.filter(function (r) { return String(r.Email).toLowerCase().trim() === email; })[0];
+    if (!rec) throw err_('NOT_FOUND', 'User not found.');
+    if (email === u.email) throw err_('FORBIDDEN', 'You cannot remove your own account.');
+    if (String(rec.Role) === 'Admin' && bool_(rec.Active) && !activeAdminsExcept_(all, email).length)
+      throw err_('FORBIDDEN', 'At least one active administrator must remain.');
+    sheet_(SHEETS.USERS).deleteRow(rec._row);
+    log_(u, 'delete_user', email);
+    return { users: usersOut_(), me: u.email };
+  });
 }
 
 /* ------------------------------------------------------------------ *

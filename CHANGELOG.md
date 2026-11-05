@@ -2,6 +2,11 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v1.9 — 2026-11-05
+
+- Added an Admin-only "Manage access" control panel (إدارة صلاحيات الدخول) in the header: add users and set each to Admin (full), Editor (add & edit) or Viewer (view only), toggle Active, and remove users — written straight to AllowedUsers. Backend actions listUsers/saveUser/deleteUser are Admin-gated, with guards so the last active admin can't be removed and you can't lock out your own admin access.
+- Version bumped to 1.9.
+
 ## v1.8 — 2026-11-05
 
 - Added the 25 ICTD policy PDFs (rendered from the Policy platform's own layout, marked معتمدة/Approved and dated 5 Nov 2026) under policy-pdfs/, and an importPolicies() backend function + menu item that imports them into the Policies drawer ("ICTD Policies" folder) and indexes each in the Documents sheet. Idempotent (skips policies already present).

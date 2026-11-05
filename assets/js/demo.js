@@ -47,6 +47,12 @@
       version: '1.' + (i % 4), status: i === 2 ? 'Draft' : 'Active', conf: s[4], fileName: s[0].replace(/\s+/g, '_') + '.' + s[2], mime: '', size: 120000 + i * 87000,
       hasFile: true, createdBy: 'demo@sr.edu.sa', createdAt: today(i), updatedBy: '', updatedAt: '', canEdit: true };
   });
+  var DEMO_USERS = [
+    { email: 'demo@sr.edu.sa', name: 'Demo User', role: 'Admin', active: true, addedAt: today(20) },
+    { email: 'nabounar@sr.edu.sa', name: 'Dr. Nasser Abounar', role: 'Admin', active: true, addedAt: today(15) },
+    { email: 'asma@sr.edu.sa', name: 'Asma Alolayan', role: 'Editor', active: true, addedAt: today(8) },
+    { email: 'viewer@sr.edu.sa', name: 'Sample Viewer', role: 'Viewer', active: false, addedAt: today(3) }
+  ];
   var seq = { DRW: 6, FLD: folders.length, DOC: docs.length };
   function nid(p) { seq[p]++; return p + '-' + ('000' + seq[p]).slice(-4); }
   function find(arr, id) { for (var i = 0; i < arr.length; i++) if (arr[i].id === id) return i; return -1; }
@@ -74,6 +80,18 @@
             description: p.description, version: p.version, status: p.status, conf: p.conf, updatedBy: 'demo@sr.edu.sa', updatedAt: today(0) }); return resolve(docs[i]);
           case 'deleteDocument': i = find(docs, p.id); docs.splice(i, 1); return resolve({ id: p.id });
           case 'openDocument': return resolve({ url: 'about:blank', granted: true, demo: true });
+          case 'listUsers': return resolve({ users: DEMO_USERS.slice(), me: 'demo@sr.edu.sa' });
+          case 'saveUser': {
+            var em = String(p.email || '').toLowerCase().trim();
+            var ex = DEMO_USERS.filter(function (x) { return x.email === em; })[0];
+            if (ex) { ex.name = p.name !== undefined ? p.name : ex.name; ex.role = p.role || ex.role; ex.active = p.active !== undefined ? !!p.active : ex.active; }
+            else DEMO_USERS.push({ email: em, name: p.name || '', role: p.role || 'Viewer', active: p.active !== undefined ? !!p.active : true, addedAt: today(0) });
+            return resolve({ users: DEMO_USERS.slice(), me: 'demo@sr.edu.sa' });
+          }
+          case 'deleteUser': {
+            DEMO_USERS = DEMO_USERS.filter(function (x) { return x.email !== String(p.email || '').toLowerCase().trim(); });
+            return resolve({ users: DEMO_USERS.slice(), me: 'demo@sr.edu.sa' });
+          }
         }
         reject({ code: 'BAD_REQUEST', message: 'Unknown action' });
       }, 120);

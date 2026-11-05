@@ -263,3 +263,10 @@ footer.site{padding:14px 22px;color:#fff;font-size:13px}
 @media print{.toolbar,.band-actions,.actions,footer.site{display:none!important}.sru-tech-bg::before{display:none}}
 
 a.btn{text-decoration:none}
+
+/* ---- Access management panel ---- */
+.adduser{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.adduser .in{flex:1;min-width:130px}
+.adduser .btn{flex:none}
+table.utbl td .in{padding:5px 8px}
+table.utbl .u-active{width:18px;height:18px;accent-color:var(--purple)}
