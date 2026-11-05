@@ -1,6 +1,6 @@
 /* ICTD Digital File Library — front-end settings. Edit this file only. */
 window.ICTD_LIB_CONFIG = {
-  VERSION: "2.0",
+  VERSION: "2.1",
 
   // 1) Apps Script Web App URL (Deploy > Manage deployments > Web app URL, ends with /exec)
   WEB_APP_URL: "https://script.google.com/macros/s/AKfycbwd5bCOgpH3bN3LfjYKx5G582LjtlBZ519kc3alzaTMiZVCTl6cfyBYqqmM_WfJHEOofA/exec",

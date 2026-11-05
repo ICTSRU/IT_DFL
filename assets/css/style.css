@@ -271,3 +271,45 @@ a.btn{text-decoration:none}
 table.utbl td .in{padding:5px 8px}
 table.utbl .u-active{width:18px;height:18px;accent-color:var(--purple)}
 .manila .del2{position:absolute;bottom:8px;inset-inline-start:44px;width:28px;height:28px;background:#fff}
+
+/* ===== Dark / night mode (manual toggle via data-theme="dark") ===== */
+:root[data-theme="dark"]{
+  --bg:#14101d; --ink:#ece7f5; --muted:#a79dbf; --border:rgba(255,255,255,.14);
+  --purple-light:#241a33; --blue-light:#13263a; --surface:#1e1830;
+}
+:root[data-theme="dark"] body{background:var(--bg);color:var(--ink)}
+/* keep the official white brand bar (logos are dark-inked) in both themes */
+:root[data-theme="dark"] .toolbar,
+:root[data-theme="dark"] .card,
+:root[data-theme="dark"] .tbl-wrap,
+:root[data-theme="dark"] .dialog,
+:root[data-theme="dark"] .login-card,
+:root[data-theme="dark"] .recent li,
+:root[data-theme="dark"] .checks,
+:root[data-theme="dark"] .in,
+:root[data-theme="dark"] select.in,
+:root[data-theme="dark"] textarea.in,
+:root[data-theme="dark"] .searchbox input,
+:root[data-theme="dark"] .tagbox,
+:root[data-theme="dark"] .icon-btn,
+:root[data-theme="dark"] .swatches button,
+:root[data-theme="dark"] table.utbl td .in{background:var(--surface);color:var(--ink);border-color:var(--border)}
+:root[data-theme="dark"] table.docs tbody tr:hover{background:#241a33}
+:root[data-theme="dark"] table.docs td{border-color:var(--border)}
+:root[data-theme="dark"] .dialog footer{background:#181226}
+:root[data-theme="dark"] .login .stage{background:linear-gradient(180deg,#14101d,#0e0a17)}
+:root[data-theme="dark"] .card h3,
+:root[data-theme="dark"] .page-head h2,
+:root[data-theme="dark"] .login-card h2,
+:root[data-theme="dark"] label.f,
+:root[data-theme="dark"] .crumbs a,
+:root[data-theme="dark"] .dt a:hover{color:#c9b8ec}
+:root[data-theme="dark"] .dt a{color:var(--ink)}
+:root[data-theme="dark"] .btn.secondary{background:var(--surface);color:#c9b8ec;border-color:var(--purple)}
+:root[data-theme="dark"] .tag{background:#2a2040;color:#cfe8f6}
+:root[data-theme="dark"] .cfgwarn{background:#2a1f12;color:#f0c98a;border-color:var(--warn)}
+:root[data-theme="dark"] .lang-mini{background:var(--surface);color:#c9b8ec;border-color:var(--border)}
+/* keep the sign-in card logo readable on dark */
+:root[data-theme="dark"] .login-card .lc-logo img{background:#fff;border-radius:10px;padding:8px 14px}
+:root[data-theme="dark"] .empty{color:var(--muted)}
+:root[data-theme="dark"] .hint{color:var(--muted)}

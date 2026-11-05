@@ -2,6 +2,11 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v2.1 — 2026-11-05
+
+- Added a night (dark) mode toggle next to the language switch, in both the app header and the sign-in screen; the choice is remembered per browser and applies across the app and login. The official white brand bar is kept in both themes so the logos stay legible.
+- Version bumped to 2.1.
+
 ## v2.0 — 2026-11-05
 
 - Platform admins can now delete folders: a delete button on each folder (Admin only) with a confirm dialog. Deleting an empty folder removes it (and trashes its empty Drive subfolder); deleting a folder that still has documents warns with the count and, on confirm, removes the folder and soft-deletes its documents from the index (the files stay in Drive). Backend deleteFolder action is Admin-gated.

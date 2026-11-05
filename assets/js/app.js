@@ -25,6 +25,13 @@
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
   function sess(k, v) { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) { return null; } }
   function t(k) { var d = LANGS[S.lang] || LANGS.ar; return d[k] !== undefined ? d[k] : (LANGS.ar[k] || k); }
+  var MOON_SVG = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>';
+  var SUN_SVG = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>';
+  function curTheme() { return store('ictd_lib_theme') === 'dark' ? 'dark' : 'light'; }
+  function applyTheme() { try { document.documentElement.setAttribute('data-theme', curTheme()); } catch (e) { /* ignore */ } }
+  function themeMark() { var dk = curTheme() === 'dark'; return (dk ? SUN_SVG : MOON_SVG) + '<span>' + esc(t(dk ? 'themeLight' : 'themeDark')) + '</span>'; }
+  function themeBtn(cls) { return '<button class="' + cls + '" data-act="theme" aria-label="' + esc(t(curTheme() === 'dark' ? 'themeLight' : 'themeDark')) + '">' + themeMark() + '</button>'; }
+  function refreshThemeButtons() { $$('[data-act="theme"]').forEach(function (b) { b.innerHTML = themeMark(); }); }
   function esc(s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function $(sel, el) { return (el || document).querySelector(sel); }
   function $$(sel, el) { return Array.prototype.slice.call((el || document).querySelectorAll(sel)); }
@@ -206,6 +213,7 @@
       '<div><h1>' + esc(t('appName')) + ' <span class="ver">v' + esc(CFG.VERSION) + '</span></h1><div class="sub">' + esc(t('appSub')) + '</div></div>' +
       '<div class="band-actions">' + (u ? '<span class="chip">' + icon('user') + '<bdi>' + esc(u.name) + '</bdi> · ' + esc(t('role_' + u.role)) + '</span>' : '') +
       (u && isAdmin() ? '<button class="btn ghost" data-act="admin-users">' + icon('shield-check') + esc(t('manageAccess')) + '</button>' : '') +
+      themeBtn('btn ghost') +
       '<button class="btn ghost" data-act="lang">' + icon('languages') + esc(t('lang')) + '</button>' +
       (u ? '<button class="btn ghost" data-act="signout">' + icon('log-out') + esc(t('signOut')) + '</button>' : '') + '</div></div></div>';
   }
@@ -227,6 +235,7 @@
   }
   function loginHeader() {
     return '<div class="brand-bar login-bar" dir="ltr">' + logo('ictd', 'ICTD', 'ICTD') +
+      themeBtn('lang-mini') +
       '<button class="lang-mini" data-act="lang">' + icon('languages') + '<span>' + esc(t('lang')) + '</span></button>' +
       logo('sru', 'Sulaiman Al Rajhi University', 'SRU') + '</div><div class="brand-rule sru-tech-bg"></div>';
   }
@@ -712,6 +721,7 @@
         .catch(function (e) { el.disabled = false; handleErr(e, $('#m-err')); });
     },
     'lang': function () { S.lang = S.lang === 'ar' ? 'en' : 'ar'; store('ictd_lib_lang', S.lang); closeModal(); if (S.user) { renderApp(); renderView(); } else renderLogin(); },
+    'theme': function () { store('ictd_lib_theme', curTheme() === 'dark' ? 'light' : 'dark'); applyTheme(); refreshThemeButtons(); },
     'signout': function () { signOut(); },
     'open-drawer': function (el) { el.classList.add('opening'); var id = el.getAttribute('data-id'); setTimeout(function () { go('#/d/' + id); }, 200); },
     'open-folder': function (el) { go('#/f/' + el.getAttribute('data-id')); },
@@ -794,7 +804,7 @@
 
   /* ---------------- start ---------------- */
   function init() {
-    var saved = store('ictd_lib_lang'); S.lang = saved === 'en' ? 'en' : 'ar'; setDir();
+    var saved = store('ictd_lib_lang'); S.lang = saved === 'en' ? 'en' : 'ar'; setDir(); applyTheme();
     if (DEMO) { boot(false); return; }
     if (configured()) initGoogle();
     var tok = sess('ictd_lib_tok');
