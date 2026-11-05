@@ -1,6 +1,6 @@
 /**
  * ICTD Digital File Library — Google Apps Script backend
- * Version 1.9 (2026-11-05)
+ * Version 2.0 (2026-11-05)
  *
  * Container-bound script: create a Google Sheet, open Extensions > Apps Script,
  * paste this file as Code.gs (and appsscript.json), run setup() once, then deploy as a Web app.
@@ -12,7 +12,7 @@
  *                 then the user is looked up in AllowedUsers (Admin / Editor / Viewer).
  */
 
-var VERSION = '1.9';
+var VERSION = '2.0';
 
 /**
  * Paste your OAuth Web Client ID here. setup() / finishSetup() write it into the
@@ -108,6 +108,7 @@ var ACTIONS = {
   updateDrawer: updateDrawer_,
   addFolder: addFolder_,
   updateFolder: updateFolder_,
+  deleteFolder: deleteFolder_,
   addDocument: addDocument_,
   updateDocument: updateDocument_,
   deleteDocument: deleteDocument_,
@@ -450,6 +451,32 @@ function updateFolder_(u, p) {
     updateRow_(SHEETS.FOLDERS, f._row, patch);
     log_(u, 'edit_folder', f.FolderID);
     return folderOut_(readAll_(SHEETS.FOLDERS).filter(function (x) { return x.FolderID === p.id; })[0]);
+  });
+}
+
+function deleteFolder_(u, p) {
+  need_(isAdmin_(u), 'Only administrators can delete folders.');
+  return withLock_(function () {
+    var f = readAll_(SHEETS.FOLDERS).filter(function (x) { return x.FolderID === p.id; })[0];
+    if (!f) throw err_('NOT_FOUND', 'Folder not found.');
+    var docs = readAll_(SHEETS.DOCS).filter(function (d) { return d.FolderID === f.FolderID && !bool_(d.Deleted); });
+    if (docs.length && !p.force) throw err_('HAS_DOCS', String(docs.length));
+    var s = stamp_(), deletedDocs = [];
+    docs.forEach(function (d) {
+      updateRow_(SHEETS.DOCS, d._row, { Deleted: true, UpdatedBy: u.email, UpdatedAt: safe_(s.date + ' ' + s.time) });
+      deletedDocs.push(d.DocID);
+    });
+    // remove the folder row
+    sheet_(SHEETS.FOLDERS).deleteRow(f._row);
+    // trash the Drive subfolder only if it is now empty
+    if (f.DriveFolderID) {
+      try {
+        var fo = DriveApp.getFolderById(String(f.DriveFolderID));
+        if (!fo.getFiles().hasNext() && !fo.getFolders().hasNext()) fo.setTrashed(true);
+      } catch (e) { /* leave the Drive folder as-is */ }
+    }
+    log_(u, 'delete_folder', f.FolderID + (deletedDocs.length ? ' (+' + deletedDocs.length + ' docs)' : ''));
+    return { id: f.FolderID, deletedDocs: deletedDocs };
   });
 }
 

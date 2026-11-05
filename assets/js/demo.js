@@ -69,6 +69,14 @@
             drawers.push(d); return resolve(d);
           case 'updateDrawer': i = find(drawers, p.id); Object.assign(drawers[i], { nameAr: p.nameAr, nameEn: p.nameEn, icon: p.icon, color: p.color, description: p.description, active: !!p.active, order: Number(p.order) || drawers[i].order }); return resolve(drawers[i]);
           case 'addFolder': var f = { id: nid('FLD'), drawerId: p.drawerId, nameAr: p.nameAr, nameEn: p.nameEn, order: 99, active: true }; folders.push(f); return resolve(f);
+          case 'deleteFolder': {
+            var fdocs = docs.filter(function (d) { return d.folderId === p.id; });
+            if (fdocs.length && !p.force) return reject({ code: 'HAS_DOCS', message: String(fdocs.length) });
+            var delIds = fdocs.map(function (d) { return d.id; });
+            docs = docs.filter(function (d) { return d.folderId !== p.id; });
+            folders = folders.filter(function (f) { return f.id !== p.id; });
+            return resolve({ id: p.id, deletedDocs: delIds });
+          }
           case 'updateFolder': i = find(folders, p.id); Object.assign(folders[i], { nameAr: p.nameAr, nameEn: p.nameEn, active: !!p.active, order: Number(p.order) || folders[i].order }); return resolve(folders[i]);
           case 'addDocument':
             if (!p.upload && !p.link) return reject({ code: 'VALIDATION', message: 'Please attach a file or paste a Google Drive link.' });

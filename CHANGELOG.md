@@ -2,6 +2,11 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v2.0 — 2026-11-05
+
+- Platform admins can now delete folders: a delete button on each folder (Admin only) with a confirm dialog. Deleting an empty folder removes it (and trashes its empty Drive subfolder); deleting a folder that still has documents warns with the count and, on confirm, removes the folder and soft-deletes its documents from the index (the files stay in Drive). Backend deleteFolder action is Admin-gated.
+- Version bumped to 2.0.
+
 ## v1.9 — 2026-11-05
 
 - Added an Admin-only "Manage access" control panel (إدارة صلاحيات الدخول) in the header: add users and set each to Admin (full), Editor (add & edit) or Viewer (view only), toggle Active, and remove users — written straight to AllowedUsers. Backend actions listUsers/saveUser/deleteUser are Admin-gated, with guards so the last active admin can't be removed and you can't lock out your own admin access.

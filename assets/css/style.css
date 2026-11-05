@@ -270,3 +270,4 @@ a.btn{text-decoration:none}
 .adduser .btn{flex:none}
 table.utbl td .in{padding:5px 8px}
 table.utbl .u-active{width:18px;height:18px;accent-color:var(--purple)}
+.manila .del2{position:absolute;bottom:8px;inset-inline-start:44px;width:28px;height:28px;background:#fff}

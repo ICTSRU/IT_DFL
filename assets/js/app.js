@@ -370,7 +370,8 @@
       var sub = nm2(f);
       html += '<div class="manila' + (f.active ? '' : ' inactive') + '" role="button" tabindex="0" data-act="open-folder" data-id="' + esc(f.id) + '"><span class="nm"><bdi>' + esc(nm(f)) + '</bdi></span>' +
         (sub ? '<span class="en"><bdi>' + esc(sub) + '</bdi></span>' : '') +
-        (isAdmin() ? '<button class="icon-btn pen" data-act="edit-folder" data-id="' + esc(f.id) + '" aria-label="' + esc(t('edit')) + '">' + icon('pencil') + '</button>' : '') +
+        (isAdmin() ? '<button class="icon-btn pen" data-act="edit-folder" data-id="' + esc(f.id) + '" aria-label="' + esc(t('edit')) + '">' + icon('pencil') + '</button>' +
+          '<button class="icon-btn del2 danger" data-act="del-folder" data-id="' + esc(f.id) + '" aria-label="' + esc(t('delFolder')) + '" title="' + esc(t('delFolder')) + '">' + icon('trash-2') + '</button>' : '') +
         '<span class="cnt">' + (S.cnt.f[f.id] || 0) + '</span></div>';
     });
     if (isEditor()) html += '<div class="manila add" role="button" tabindex="0" data-act="new-folder" data-id="' + esc(id) + '"><span>' + icon('folder-plus') + '<br>' + esc(t('newFolder')) + '</span></div>';
@@ -622,6 +623,26 @@
       reindex(); closeModal(); renderFilters(); renderView(); toast(t('saved'));
     }).catch(function (e) { btn.disabled = false; handleErr(e, err); });
   }
+  function folderDocCount(id) { return S.docs.filter(function (d) { return d.folderId === id; }).length; }
+  function confirmDeleteFolder(id) {
+    var f = S.fById[id]; if (!f) return;
+    var n = folderDocCount(id);
+    var body = '<p><b><bdi>' + esc(nm(f)) + '</bdi></b></p><p>' + (n ? esc(t('folderHasDocs').replace('{n}', n)) : esc(t('confirmDeleteFolder'))) + '</p><div class="err" id="m-err"></div>';
+    modal(t('delFolder'), body,
+      '<button class="btn secondary" data-act="close-modal">' + esc(t('cancel')) + '</button><button class="btn danger" id="m-delfolder" data-act="do-del-folder" data-id="' + esc(id) + '" data-force="' + (n ? '1' : '0') + '">' + icon('trash-2') + esc(t('confirm')) + '</button>',
+      { cls: 'sm', focus: false });
+  }
+  function doDeleteFolder(id, force) {
+    var b = $('#m-delfolder'); if (b) b.disabled = true;
+    api('deleteFolder', { id: id, force: force }).then(function (r) {
+      S.folders = S.folders.filter(function (x) { return x.id !== r.id; });
+      if (r.deletedDocs && r.deletedDocs.length) { var del = {}; r.deletedDocs.forEach(function (x) { del[x] = 1; }); S.docs = S.docs.filter(function (d) { return !del[d.id]; }); }
+      reindex(); closeModal(); renderFilters(); renderView(); toast(t('folderDeleted'));
+    }).catch(function (e) {
+      if (e && e.code === 'HAS_DOCS') { if (b) { b.disabled = false; b.setAttribute('data-force', '1'); } var x = $('#m-err'); if (x) x.textContent = t('folderHasDocs').replace('{n}', e.message); return; }
+      if (b) b.disabled = false; handleErr(e, $('#m-err'));
+    });
+  }
 
   /* ---------------- search / filter plumbing ---------------- */
   function ensureSearchView() { if (S.view.name !== 'search') go('#/s'); else renderView(); }
@@ -698,6 +719,8 @@
     'edit-drawer': function (el) { openDrawerForm(S.dById[el.getAttribute('data-id')]); },
     'new-folder': function (el) { openFolderForm(null, el.getAttribute('data-id')); },
     'edit-folder': function (el) { openFolderForm(S.fById[el.getAttribute('data-id')]); },
+    'del-folder': function (el) { confirmDeleteFolder(el.getAttribute('data-id')); },
+    'do-del-folder': function (el) { doDeleteFolder(el.getAttribute('data-id'), el.getAttribute('data-force') === '1'); },
     'save-drawer': saveDrawer, 'save-folder': saveFolder,
     'add-doc': function (el) { openDocForm(null, { drawerId: el.getAttribute('data-drawer') || '', folderId: el.getAttribute('data-folder') || '' }); },
     'edit-doc': function (el) { var d = docById(el.getAttribute('data-id')); if (d) openDocForm(d); },
