@@ -2,6 +2,14 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v1.6 — 2026-11-05
+
+- Redesigned the sign-in screen to the standard ITOC landing used across the other SRU platforms: white brand bar (ICTD left, university right) over a purple→blue rule, a branded card with the ICTD logo, platform title and "@sr.edu.sa only" note, an info box, a large purple "تسجيل الدخول بحساب الجامعة / Sign in with your university account" button, numbered 1-2-3 steps, a "skip this screen next time" option, and the dark ITOC footer.
+- The purple button triggers the same secure Google sign-in (an invisible Google button is overlaid on it), so the ID-token verification is unchanged.
+- "Skip this screen next time" sets Google auto-select so returning users sign in without the extra click.
+- Footer now reads "ITOC Operations Center — …" with the © year, matching the other platforms.
+- Version bumped to 1.6 (shown in header and footer).
+
 ## v1.5 — 2026-11-05
 
 - rebuildStorage() is now idempotent: it checks each drawer/folder's actual Drive parent and only (re)creates the ones not already under the target root, so re-running never creates duplicate folders and a partial run can be finished by simply running it again. Files already inside their folder are left in place.
