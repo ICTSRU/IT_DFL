@@ -2,6 +2,11 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v1.7 — 2026-11-05
+
+- Cabinet interface switched from vertical stacked drawers to a horizontal layout: the drawers now sit side by side as pull-out columns (lateral file cabinet), wrapping responsively, with the cabinet summary and recently-added panels moved below.
+- Version bumped to 1.7 (shown in header and footer).
+
 ## v1.6 — 2026-11-05
 
 - Redesigned the sign-in screen to the standard ITOC landing used across the other SRU platforms: white brand bar (ICTD left, university right) over a purple→blue rule, a branded card with the ICTD logo, platform title and "@sr.edu.sa only" note, an info box, a large purple "تسجيل الدخول بحساب الجامعة / Sign in with your university account" button, numbered 1-2-3 steps, a "skip this screen next time" option, and the dark ITOC footer.

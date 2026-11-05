@@ -331,17 +331,17 @@
   }
 
   function viewCabinet() {
-    var html = '<div class="cols"><section><div class="page-head"><h2>' + icon('archive') + ' ' + esc(t('cabinet')) + '</h2><span class="grow"></span>' +
+    var html = '<div class="page-head"><h2>' + icon('archive') + ' ' + esc(t('cabinet')) + '</h2><span class="grow"></span>' +
       (isAdmin() ? '<button class="btn secondary" data-act="new-drawer">' + icon('plus') + esc(t('newDrawer')) + '</button>' : '') + '</div>' +
-      '<div class="cabinet"><div class="cab-top"><span class="cab-plate"><bdi>' + esc(t('cabinetPlate')) + '</bdi></span><span class="cab-lock">' + icon('lock') + '</span></div>';
-    if (!S.drawers.length) html += '<div class="empty" style="color:#fff">' + esc(t('nothingHere')) + '</div>';
+      '<div class="cabinet"><div class="cab-top"><span class="cab-plate"><bdi>' + esc(t('cabinetPlate')) + '</bdi></span><span class="cab-lock">' + icon('lock') + '</span></div><div class="drawers-row">';
+    if (!S.drawers.length) html += '<div class="empty" style="color:#fff;grid-column:1/-1">' + esc(t('nothingHere')) + '</div>';
     S.drawers.forEach(function (d) {
       var n = S.cnt.d[d.id] || 0, sub = nm2(d);
       html += '<button class="drawer' + (d.active ? '' : ' inactive') + '" style="--accent:' + safeColor(d.color) + '" data-act="open-drawer" data-id="' + esc(d.id) + '" aria-label="' + esc(nm(d)) + '">' +
         '<span class="holder"><b>' + icon(iconName(d.icon)) + '<bdi>' + esc(nm(d)) + '</bdi></b>' + (sub ? '<small><bdi>' + esc(sub) + '</bdi></small>' : '') + '</span>' +
         '<span class="count">' + icon('file-text') + n + '</span><span class="handle"></span></button>';
     });
-    html += '<div class="cab-base"></div></div></section><aside>' + statsCard() + recentCard() + '</aside></div>';
+    html += '</div><div class="cab-base"></div></div><div class="cab-below">' + statsCard() + recentCard() + '</div>';
     return html;
   }
   function statsCard() {

@@ -98,28 +98,30 @@ html[dir=rtl] .crumbs .sep{transform:scaleX(-1)}
 .recent .m{font-size:12px;color:var(--muted)}
 
 /* ---- The filing cabinet ---- */
-.cabinet{position:relative;max-width:560px;margin:8px auto 0;padding:16px 16px 22px;border-radius:14px;
+.cabinet{position:relative;max-width:1040px;margin:8px auto 0;padding:16px 16px 20px;border-radius:14px;
   background:linear-gradient(90deg,#4a5261,#6b7384 12%,#7d8697 50%,#6b7384 88%,#4a5261);
   box-shadow:0 22px 40px rgba(36,20,54,.28),inset 0 0 0 2px rgba(255,255,255,.18),inset 0 -6px 0 rgba(0,0,0,.22)}
 .cab-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 4px 12px}
 .cab-plate{background:#f4f1e6;border:2px solid #4b5262;border-radius:4px;padding:3px 14px;font-weight:800;font-size:13px;color:#2b2f3a;letter-spacing:.02em;box-shadow:inset 0 1px 0 #fff}
 .cab-lock{width:26px;height:26px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#b7bdc9 55%,#6d7585);border:2px solid #3c4350;display:grid;place-items:center;color:#3c4350}
 .cab-lock .ic{width:13px;height:13px}
-.drawer{position:relative;display:block;width:100%;height:88px;margin:0 0 12px;padding:0;border:0;border-radius:8px;cursor:pointer;text-align:start;
-  background:linear-gradient(#d3d8e1,#b4bbc8 55%,#9aa2b1);
+.drawers-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.drawer{position:relative;display:flex;flex-direction:column;align-items:center;height:188px;margin:0;padding:18px 10px 0;border:0;border-radius:8px;cursor:pointer;text-align:center;
+  background:linear-gradient(#d3d8e1,#b4bbc8 60%,#9aa2b1);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.8),inset 0 -3px 0 rgba(0,0,0,.18),0 3px 0 #323946,0 7px 10px rgba(0,0,0,.3);
   transition:transform .18s ease,box-shadow .18s ease,filter .18s}
-.drawer::before{content:"";position:absolute;inset-block:8px;inset-inline-start:8px;width:6px;border-radius:3px;background:var(--accent,#501e8c)}
-.drawer:hover{transform:translateY(5px) scale(1.012);box-shadow:inset 0 1px 0 rgba(255,255,255,.8),inset 0 -3px 0 rgba(0,0,0,.18),0 1px 0 #323946,0 14px 16px rgba(0,0,0,.38);filter:brightness(1.04)}
-.drawer.opening{transform:translateY(16px) scale(1.05);filter:brightness(1.08)}
-.drawer .holder{position:absolute;top:9px;inset-inline-start:50%;transform:translateX(0);margin-inline-start:-92px;width:184px;background:#fffdf5;border:2px solid #5a6273;border-radius:4px;padding:3px 8px;text-align:center;box-shadow:inset 0 1px 0 #fff,0 1px 2px rgba(0,0,0,.25)}
-html[dir=rtl] .drawer .holder{transform:none;inset-inline-start:auto;inset-inline-end:50%;margin-inline-start:0;margin-inline-end:-92px}
-.drawer .holder b{display:flex;align-items:center;justify-content:center;gap:6px;font-size:15.5px;line-height:1.25;color:var(--accent,#501e8c)}
-.drawer .holder small{display:block;font-size:11.5px;color:#4b5262;line-height:1.2}
-.drawer .handle{position:absolute;bottom:11px;inset-inline-start:50%;margin-inline-start:-46px;width:92px;height:15px;border-radius:8px;background:linear-gradient(#f2f4f8,#a4acba);box-shadow:0 3px 4px rgba(0,0,0,.45),inset 0 1px 0 #fff}
-html[dir=rtl] .drawer .handle{inset-inline-start:auto;inset-inline-end:50%;margin-inline-start:0;margin-inline-end:-46px}
-.drawer .count{position:absolute;top:10px;inset-inline-end:12px;background:var(--accent,#501e8c);color:#fff;border-radius:999px;padding:1px 10px;font-size:12.5px;font-weight:700;display:flex;gap:5px;align-items:center}
+.drawer::before{content:"";position:absolute;top:8px;inset-inline:8px;height:6px;border-radius:3px;background:var(--accent,#501e8c)}
+.drawer:hover{transform:translateY(8px) scale(1.02);box-shadow:inset 0 1px 0 rgba(255,255,255,.8),inset 0 -3px 0 rgba(0,0,0,.18),0 1px 0 #323946,0 16px 18px rgba(0,0,0,.38);filter:brightness(1.04)}
+.drawer.opening{transform:translateY(22px) scale(1.05);filter:brightness(1.08)}
+.drawer .holder{margin:16px auto 0;width:94%;background:#fffdf5;border:2px solid #5a6273;border-radius:4px;padding:8px 6px;text-align:center;box-shadow:inset 0 1px 0 #fff,0 1px 2px rgba(0,0,0,.25)}
+.drawer .holder b{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:14.5px;line-height:1.2;color:var(--accent,#501e8c)}
+.drawer .holder b .ic{width:24px;height:24px}
+.drawer .holder small{display:block;font-size:11px;color:#4b5262;line-height:1.2;margin-top:3px}
+.drawer .handle{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);width:60px;height:14px;border-radius:8px;background:linear-gradient(#f2f4f8,#a4acba);box-shadow:0 3px 4px rgba(0,0,0,.45),inset 0 1px 0 #fff}
+.drawer .count{position:absolute;top:12px;inset-inline-end:10px;background:var(--accent,#501e8c);color:#fff;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:700;display:flex;gap:4px;align-items:center}
 .drawer.inactive{opacity:.55}
+.cab-below{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:1040px;margin:16px auto 0}
+.cab-below .card{margin:0!important}
 .cab-base{height:12px;margin:2px 14px -6px;border-radius:0 0 8px 8px;background:#2e3440;box-shadow:0 8px 14px rgba(0,0,0,.3)}
 
 /* ---- Open drawer + manila folders ---- */
@@ -255,7 +257,7 @@ footer.site{padding:14px 22px;color:#fff;font-size:13px}
   table.docs tr{border-top:1px solid var(--border);padding:8px 4px}
   table.docs td{border:0;padding:3px 10px}
   table.docs td[data-l]::before{content:attr(data-l) ": ";color:var(--muted);font-weight:700;font-size:12px}
-  .drawer .holder{width:150px;margin-inline-start:-75px}html[dir=rtl] .drawer .holder{margin-inline-end:-75px;margin-inline-start:0}
+  .cab-below{grid-template-columns:1fr}
   .foot-inner .grow{text-align:start;flex-basis:100%;order:3}
 }
 @media print{.toolbar,.band-actions,.actions,footer.site{display:none!important}.sru-tech-bg::before{display:none}}
