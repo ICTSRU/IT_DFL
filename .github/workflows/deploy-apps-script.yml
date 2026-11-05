@@ -1,0 +1,61 @@
+# SRU Digital File Library — automatic Apps Script update · autodeploy v1.3
+# Every push that changes apps-script/** (or a manual "Run workflow") pushes the files to the Apps Script
+# project and moves the EXISTING web-app deployment to a new version — the /exec URL stays the same.
+# Secrets (Settings ▸ Secrets and variables ▸ Actions): CLASPRC_JSON · SCRIPT_ID · DEPLOYMENT_ID
+name: Deploy Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps-script/**', '.github/workflows/deploy-apps-script.yml']
+  workflow_dispatch:
+
+concurrency: apps-script-deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SCRIPT_ID: ${{ secrets.SCRIPT_ID || vars.SCRIPT_ID }}
+      DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID || vars.DEPLOYMENT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install clasp (pinned)
+        run: npm install -g @google/clasp@2.4.2
+
+      - name: Credentials
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          miss=""
+          [ -n "$CLASPRC_JSON" ]  || miss="$miss CLASPRC_JSON"
+          [ -n "$SCRIPT_ID" ]     || miss="$miss SCRIPT_ID"
+          [ -n "$DEPLOYMENT_ID" ] || miss="$miss DEPLOYMENT_ID"
+          if [ -n "$miss" ]; then echo "::error::Missing repository secret(s):$miss — add them in Settings > Secrets and variables > Actions (exact names)"; exit 1; fi
+          echo "$CLASPRC_JSON" | grep -q '"refresh_token"' || { echo "::error::CLASPRC_JSON does not contain refresh_token — paste the whole content of .clasprc.json"; exit 1; }
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+
+      - name: Keep the live project's manifest (appsscript.json)
+        run: |
+          mkdir -p /tmp/live && cd /tmp/live
+          printf '{"scriptId":"%s"}' "$SCRIPT_ID" > .clasp.json
+          clasp pull
+          cp appsscript.json "$GITHUB_WORKSPACE/apps-script/appsscript.json"
+
+      - name: Push files (Code.gs + appsscript.json)
+        working-directory: apps-script
+        run: |
+          printf '{"scriptId":"%s","rootDir":"."}' "$SCRIPT_ID" > .clasp.json
+          clasp push --force
+
+      - name: New version on the same deployment (URL unchanged)
+        working-directory: apps-script
+        run: |
+          VER=$(grep -oP "VERSION\s*=\s*'\K[0-9.]+" Code.gs | head -1 || echo "?")
+          clasp deploy -i "$DEPLOYMENT_ID" -d "v$VER · ${GITHUB_SHA::7}"
+          echo "### ✅ Apps Script updated to v$VER (same /exec URL)" >> "$GITHUB_STEP_SUMMARY"
