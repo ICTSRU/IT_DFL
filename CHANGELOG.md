@@ -2,6 +2,11 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v2.2 — 2026-11-05
+
+- Bulk upload: editors can drop/select many files at once into any folder. Each file becomes its own document, with metadata auto-filled per file (title from the file name, date from the file's last-modified, owner = current user, version 1.0, default confidentiality) and editable per row before uploading. Files upload one by one with per-row status; reuses the existing addDocument backend (no backend change).
+- Version bumped to 2.2.
+
 ## v2.1 — 2026-11-05
 
 - Added a night (dark) mode toggle next to the language switch, in both the app header and the sign-in screen; the choice is remembered per browser and applies across the app and login. The official white brand bar is kept in both themes so the logos stay legible.

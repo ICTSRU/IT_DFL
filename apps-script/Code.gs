@@ -1,6 +1,6 @@
 /**
  * ICTD Digital File Library — Google Apps Script backend
- * Version 2.1 (2026-11-05)
+ * Version 2.2 (2026-11-05)
  *
  * Container-bound script: create a Google Sheet, open Extensions > Apps Script,
  * paste this file as Code.gs (and appsscript.json), run setup() once, then deploy as a Web app.
@@ -12,7 +12,7 @@
  *                 then the user is looked up in AllowedUsers (Admin / Editor / Viewer).
  */
 
-var VERSION = '2.1';
+var VERSION = '2.2';
 
 /**
  * Paste your OAuth Web Client ID here. setup() / finishSetup() write it into the

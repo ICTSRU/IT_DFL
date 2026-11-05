@@ -278,6 +278,7 @@
       '<input id="q" type="text" inputmode="search" autocomplete="off" placeholder="' + esc(t('searchPh')) + '" value="' + esc(S.q) + '" aria-label="' + esc(t('searchPh')) + '">' +
       '<button class="clear' + (S.q ? '' : ' hidden') + '" id="qclear" data-act="clear-q" aria-label="' + esc(t('clearFilters')) + '">' + icon('x') + '</button></div>' +
       '<button class="btn secondary" data-act="toggle-filters">' + icon('sliders-horizontal') + esc(t('filters')) + '</button>' +
+      (isEditor() ? '<button class="btn secondary" data-act="bulk-upload">' + icon('upload') + esc(t('bulkUpload')) + '</button>' : '') +
       (isEditor() ? '<button class="btn" data-act="add-doc">' + icon('file-plus') + esc(t('addDoc')) + '</button>' : '') + '</div></div>' +
       '<div id="filters"></div><main id="view"></main>' + footer();
     renderFilters();
@@ -394,6 +395,7 @@
     var list = S.docs.filter(function (x) { return x.folderId === id; });
     return crumbs([[t('cabinet'), '#/'], [nm(d), '#/d/' + d.id], [nm(f), '']]) +
       '<div class="page-head"><h2>' + icon('folder-open') + ' <bdi>' + esc(nm(f)) + '</bdi></h2><span class="chip" style="background:var(--purple-light);color:var(--purple);border-color:var(--border)">' + esc(cntLabel(list.length)) + '</span><span class="grow"></span>' +
+      (isEditor() ? '<button class="btn secondary" data-act="bulk-upload" data-drawer="' + esc(d.id) + '" data-folder="' + esc(id) + '">' + icon('upload') + esc(t('bulkUpload')) + '</button>' : '') +
       (isEditor() ? '<button class="btn" data-act="add-doc" data-drawer="' + esc(d.id) + '" data-folder="' + esc(id) + '">' + icon('file-plus') + esc(t('addDoc')) + '</button>' : '') +
       (isAdmin() ? '<button class="btn secondary" data-act="edit-folder" data-id="' + esc(id) + '">' + icon('pencil') + esc(t('edit')) + '</button>' : '') + '</div>' +
       docTable(list, false, t('emptyFolder'));
@@ -539,6 +541,88 @@
       if (FORM.editId) S.docs = S.docs.map(function (x) { return x.id === doc.id ? doc : x; }); else S.docs.push(doc);
       reindex(); closeModal(); renderFilters(); renderView(); toast(t('saved'));
     }).catch(function (e) { btn.disabled = false; btn.innerHTML = icon('check') + esc(t('save')); handleErr(e, err); });
+  }
+
+  /* ---------------- bulk upload ---------------- */
+  var BULK = { items: [] };
+  function toB64(file) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(String(r.result).split(',')[1] || ''); }; r.onerror = rej; r.readAsDataURL(file); }); }
+  function bulkMaxMB() { return Math.min(S.config.maxUploadMB || 20, CFG.MAX_UPLOAD_MB || 20); }
+  function openBulkUpload(pre) {
+    pre = pre || {};
+    BULK = { items: [] };
+    var drawerId = pre.drawerId || (S.drawers[0] && S.drawers[0].id) || '';
+    var folderId = pre.folderId || '';
+    if (!folderId) { var ff = S.folders.filter(function (x) { return x.drawerId === drawerId; })[0]; folderId = ff ? ff.id : ''; }
+    var maxMB = bulkMaxMB();
+    var body = '<div class="row2"><div class="field"><label class="f" for="bk-drawer">' + esc(t('fDrawer')) + '</label><select class="in" id="bk-drawer">' +
+      S.drawers.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === drawerId ? ' selected' : '') + '>' + esc(nm(x)) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><label class="f" for="bk-folder">' + esc(t('fFolder')) + '</label><select class="in" id="bk-folder">' + folderOptions(drawerId, folderId) + '</select></div></div>' +
+      '<input type="file" id="bk-file" multiple class="sr-only"><label class="drop" id="bk-drop" for="bk-file"><div>' + icon('upload') + '</div><div><b>' + esc(t('bulkChoose')) + '</b></div><small>' + esc(t('maxSize')) + ': ' + maxMB + ' MB · ' + esc(t('bulkCap')) + '</small></label>' +
+      '<div id="bk-rows"></div><div class="err" id="m-err" role="alert"></div>';
+    var foot = '<button class="btn secondary" data-act="close-modal">' + esc(t('close')) + '</button><button class="btn" id="bk-go" data-act="bulk-go" disabled>' + icon('upload') + esc(t('uploadAll')) + '</button>';
+    modal(t('bulkTitle'), body, foot, { sticky: true, focus: false, cls: 'wide' });
+  }
+  function addBulkFiles(list) {
+    if (!list) return;
+    var maxMB = bulkMaxMB(), names = {}; (CFG.TEAM_NAMES || []).concat([S.user.name]).forEach(function (n) { if (n) names[n] = 1; });
+    Array.prototype.forEach.call(list, function (f) {
+      if (BULK.items.length >= 50) return;
+      var d = f.lastModified ? new Date(f.lastModified) : new Date();
+      var iso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      BULK.items.push({ file: f, title: f.name.replace(/\.[^.]+$/, '').slice(0, 250), date: iso, owner: S.user.name,
+        tags: '', conf: S.config.defaultConf || 'Internal', version: '1.0', tooBig: f.size > maxMB * 1048576, status: '' });
+    });
+    renderBulkRows();
+  }
+  function renderBulkRows() {
+    var host = $('#bk-rows'); if (!host) return;
+    if (!BULK.items.length) { host.innerHTML = ''; var g0 = $('#bk-go'); if (g0) g0.disabled = true; return; }
+    var rows = BULK.items.map(function (it, i) {
+      return '<tr data-i="' + i + '"><td data-l="' + esc(t('fFile')) + '">' + icon(fileIcon({ fileName: it.file.name })) + ' <bdi>' + esc(it.file.name) + '</bdi><div class="path">' + esc(fmtSize(it.file.size)) + (it.tooBig ? ' · <span class="req">' + esc(t('errTooBig')) + '</span>' : '') + '</div></td>' +
+        '<td data-l="' + esc(t('colTitle')) + '"><input class="in bk-t" value="' + esc(it.title) + '" maxlength="250"></td>' +
+        '<td data-l="' + esc(t('colDate')) + '"><input class="in bk-d" type="date" value="' + esc(it.date) + '"></td>' +
+        '<td data-l="' + esc(t('colOwner')) + '"><input class="in bk-o" value="' + esc(it.owner) + '" maxlength="100"></td>' +
+        '<td data-l="' + esc(t('fConf')) + '"><select class="in bk-c">' + CONFS.map(function (s) { return '<option value="' + s + '"' + (s === it.conf ? ' selected' : '') + '>' + esc(t('conf_' + s)) + '</option>'; }).join('') + '</select></td>' +
+        '<td data-l="' + esc(t('colVer')) + '"><input class="in bk-v" value="' + esc(it.version) + '" maxlength="20" style="width:64px"></td>' +
+        '<td class="bk-st">' + (it.status || '') + '</td>' +
+        '<td><button class="icon-btn danger" data-act="bulk-del" data-i="' + i + '" aria-label="' + esc(t('del')) + '">' + icon('x') + '</button></td></tr>';
+    }).join('');
+    host.innerHTML = '<div class="tbl-wrap" style="margin-top:12px"><table class="docs bktbl"><thead><tr><th class="nosort">' + esc(t('fFile')) + '</th><th class="nosort">' + esc(t('colTitle')) + '</th><th class="nosort">' + esc(t('colDate')) + '</th><th class="nosort">' + esc(t('colOwner')) + '</th><th class="nosort">' + esc(t('fConf')) + '</th><th class="nosort">' + esc(t('colVer')) + '</th><th class="nosort">' + esc(t('colStatus')) + '</th><th class="nosort"></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    var g = $('#bk-go'); if (g) g.disabled = false;
+  }
+  function startBulkUpload() {
+    var err = $('#m-err'); err.textContent = '';
+    if (!BULK.items.length) { err.textContent = t('bulkNoFiles'); return; }
+    var drawerId = $('#bk-drawer').value, folderId = $('#bk-folder').value;
+    if (!folderId) { err.textContent = t('errRequired'); return; }
+    // snapshot per-row field values from the DOM
+    $$('#bk-rows tbody tr').forEach(function (tr) {
+      var i = Number(tr.getAttribute('data-i')), it = BULK.items[i]; if (!it) return;
+      it.title = $('.bk-t', tr).value.trim(); it.date = $('.bk-d', tr).value; it.owner = $('.bk-o', tr).value.trim();
+      it.conf = $('.bk-c', tr).value; it.version = $('.bk-v', tr).value.trim() || '1.0';
+    });
+    var go = $('#bk-go'), close = $('[data-act="close-modal"]'); go.disabled = true; if (close) close.disabled = true;
+    var ok = 0, i = 0;
+    function setStatus(idx, html) { var c = $('#bk-rows tr[data-i="' + idx + '"] .bk-st'); if (c) c.innerHTML = html; }
+    function next() {
+      if (i >= BULK.items.length) {
+        reindex(); renderFilters(); renderView();
+        toast(t('bulkResult').replace('{ok}', ok).replace('{n}', BULK.items.length), ok === BULK.items.length ? '' : 'warn');
+        go.innerHTML = icon('check') + esc(t('bulkDone')); if (close) close.disabled = false;
+        return;
+      }
+      var it = BULK.items[i], idx = i; i++;
+      if (!it.title || !it.date || !it.owner) { setStatus(idx, '<span class="req">' + esc(t('errRequired')) + '</span>'); return next(); }
+      if (it.tooBig) { setStatus(idx, '<span class="req">' + esc(t('bulkFail')) + '</span>'); return next(); }
+      setStatus(idx, icon('loader-circle', 'spin') + ' ' + esc(t('bulkUploading')));
+      toB64(it.file).then(function (b64) {
+        return api('addDocument', { title: it.title, drawerId: drawerId, folderId: folderId, date: it.date, owner: it.owner,
+          ownerEmail: it.owner === S.user.name ? S.user.email : '', version: it.version, status: 'Active', conf: it.conf, tags: [],
+          description: '', upload: { name: it.file.name, mime: it.file.type || 'application/octet-stream', data: b64 } });
+      }).then(function (doc) { S.docs.push(doc); ok++; setStatus(idx, '<span style="color:var(--ok)">' + icon('check') + ' ' + esc(t('bulkDone')) + '</span>'); next(); })
+        .catch(function (e) { setStatus(idx, '<span class="req">' + esc((e && e.message) || t('bulkFail')) + '</span>'); if (['AUTH', 'AUTH_EXPIRED', 'SESSION', 'NOT_ALLOWED'].indexOf(e && e.code) >= 0) { handleErr(e); return; } next(); });
+    }
+    next();
   }
 
   function docById(id) { return S.docs.filter(function (d) { return d.id === id; })[0]; }
@@ -733,6 +817,9 @@
     'do-del-folder': function (el) { doDeleteFolder(el.getAttribute('data-id'), el.getAttribute('data-force') === '1'); },
     'save-drawer': saveDrawer, 'save-folder': saveFolder,
     'add-doc': function (el) { openDocForm(null, { drawerId: el.getAttribute('data-drawer') || '', folderId: el.getAttribute('data-folder') || '' }); },
+    'bulk-upload': function (el) { openBulkUpload({ drawerId: el.getAttribute('data-drawer') || '', folderId: el.getAttribute('data-folder') || '' }); },
+    'bulk-del': function (el) { BULK.items.splice(Number(el.getAttribute('data-i')), 1); renderBulkRows(); },
+    'bulk-go': startBulkUpload,
     'edit-doc': function (el) { var d = docById(el.getAttribute('data-id')); if (d) openDocForm(d); },
     'save-doc': saveDoc,
     'del-doc': function (el) { confirmDelete(el.getAttribute('data-id')); },
@@ -784,6 +871,8 @@
   document.addEventListener('change', function (e) {
     var id = e.target.id;
     if (id === 'm-drawer') { var fs = $('#m-folder'); fs.innerHTML = folderOptions(e.target.value, ''); return; }
+    if (id === 'bk-drawer') { var bf = $('#bk-folder'); if (bf) bf.innerHTML = folderOptions(e.target.value, ''); return; }
+    if (id === 'bk-file') { addBulkFiles(e.target.files); e.target.value = ''; return; }
     if (id === 'm-file') { setFile(e.target.files && e.target.files[0]); return; }
     var map = { 'f-drawer': 'drawerId', 'f-folder': 'folderId', 'f-owner': 'owner', 'f-tag': 'tag', 'f-from': 'from', 'f-to': 'to', 'f-status': 'status', 'f-conf': 'conf' };
     if (map[id]) {
@@ -795,11 +884,12 @@
     if (!file) return; FORM.file = file;
     var n = $('#m-fname'); if (n) n.innerHTML = icon('file-check') + ' <b><bdi>' + esc(file.name) + '</bdi></b> · ' + esc(fmtSize(file.size));
   }
-  document.addEventListener('dragover', function (e) { var d = e.target.closest && e.target.closest('#m-drop'); if (d) { e.preventDefault(); d.classList.add('over'); } });
-  document.addEventListener('dragleave', function (e) { var d = e.target.closest && e.target.closest('#m-drop'); if (d) d.classList.remove('over'); });
+  document.addEventListener('dragover', function (e) { var d = e.target.closest && e.target.closest('#m-drop,#bk-drop'); if (d) { e.preventDefault(); d.classList.add('over'); } });
+  document.addEventListener('dragleave', function (e) { var d = e.target.closest && e.target.closest('#m-drop,#bk-drop'); if (d) d.classList.remove('over'); });
   document.addEventListener('drop', function (e) {
-    var d = e.target.closest && e.target.closest('#m-drop'); if (!d) return;
-    e.preventDefault(); d.classList.remove('over'); setFile(e.dataTransfer.files && e.dataTransfer.files[0]);
+    var d = e.target.closest && e.target.closest('#m-drop,#bk-drop'); if (!d) return;
+    e.preventDefault(); d.classList.remove('over');
+    if (d.id === 'bk-drop') addBulkFiles(e.dataTransfer.files); else setFile(e.dataTransfer.files && e.dataTransfer.files[0]);
   });
 
   /* ---------------- start ---------------- */
