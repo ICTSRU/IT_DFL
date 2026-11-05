@@ -1,6 +1,6 @@
 /**
  * ICTD Digital File Library — Google Apps Script backend
- * Version 1.0 (2026-11-04)
+ * Version 1.3 (2026-11-05)
  *
  * Container-bound script: create a Google Sheet, open Extensions > Apps Script,
  * paste this file as Code.gs (and appsscript.json), run setup() once, then deploy as a Web app.
@@ -12,7 +12,14 @@
  *                 then the user is looked up in AllowedUsers (Admin / Editor / Viewer).
  */
 
-var VERSION = '1.0';
+var VERSION = '1.3';
+
+/**
+ * Paste your OAuth Web Client ID here. setup() / finishSetup() write it into the
+ * Config sheet automatically, so you do not have to edit the cell by hand.
+ * Leave it as '' to manage the ClientID cell manually instead.
+ */
+var CLIENT_ID = '286826767897-ptof53iq20gn5964e8ogvpk0c71cu944.apps.googleusercontent.com';
 
 var SHEETS = {
   CONFIG: 'Config',
@@ -591,6 +598,7 @@ function openDocument_(u, p) {
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('ICTD Library')
     .addItem('Run setup (first time)', 'setup')
+    .addItem('Finish / repair setup (Client ID + make me Admin)', 'finishSetup')
     .addItem('Show deployment checklist', 'showChecklist')
     .addToUi();
 }
@@ -621,6 +629,9 @@ function setup() {
   cfgSheet.setColumnWidth(2, 360); cfgSheet.setColumnWidth(3, 520);
   CacheService.getScriptCache().remove('cfg_v1');
 
+  // Write the OAuth Client ID from the constant above (overwrites the placeholder)
+  if (CLIENT_ID && CLIENT_ID.indexOf('PASTE_') < 0) setConfigValue_('ClientID', CLIENT_ID);
+
   // Validation lists
   var users = book.getSheetByName(SHEETS.USERS);
   users.getRange(2, 3, 500, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(ROLES, true).build());
@@ -629,11 +640,10 @@ function setup() {
   docs.getRange(2, 11, 2000, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(STATUSES, true).build());
   docs.getRange(2, 12, 2000, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(CONFS, true).build());
 
-  // First administrator = the person running setup
-  if (users.getLastRow() < 2) {
-    var me = Session.getEffectiveUser().getEmail() || Session.getActiveUser().getEmail();
-    if (me) users.appendRow([me.toLowerCase(), 'Library Administrator', 'Admin', true, safe_(stamp_().date)]);
-  }
+  // First administrator = the person running setup.
+  // NOTE: inserting the checkboxes above makes getLastRow() unreliable (every checkbox
+  // row counts as used), so we look for an existing e-mail in column A instead.
+  ensureAdmin_(users);
 
   // Root folder, sample drawers and folders (only on a fresh install)
   var root = ensureRoot_();
@@ -664,12 +674,49 @@ function setup() {
   showChecklist();
 }
 
+/**
+ * Add the person running the script to AllowedUsers as Admin, if no row for their
+ * e-mail exists yet. Detects existing users by column A (Email) so pre-inserted
+ * checkboxes in the Active column cannot hide the fact that the list is empty.
+ * Writes into the first row whose Email cell is blank, so no blank rows are left above it.
+ */
+function ensureAdmin_(users) {
+  users = users || sheet_(SHEETS.USERS);
+  var me = (Session.getEffectiveUser().getEmail() || Session.getActiveUser().getEmail() || '').toLowerCase().trim();
+  if (!me) return '';
+  var last = users.getLastRow();
+  var colA = last >= 2 ? users.getRange(2, 1, last - 1, 1).getValues() : [];
+  for (var i = 0; i < colA.length; i++) {
+    if (String(colA[i][0] || '').toLowerCase().trim() === me) return me; // already listed
+  }
+  var row = last + 1;
+  for (var j = 0; j < colA.length; j++) { if (String(colA[j][0] || '').trim() === '') { row = j + 2; break; } }
+  users.getRange(row, 1, 1, 5).setValues([[me, 'Library Administrator', 'Admin', true, safe_(stamp_().date)]]);
+  return me;
+}
+
+/**
+ * Run this any time after setup() to (re)apply the OAuth Client ID and make sure
+ * you are an Admin — safe to run repeatedly. Use it to repair a library where the
+ * ClientID cell still shows the placeholder or AllowedUsers has no Admin.
+ */
+function finishSetup() {
+  var changes = [];
+  if (CLIENT_ID && CLIENT_ID.indexOf('PASTE_') < 0) { setConfigValue_('ClientID', CLIENT_ID); changes.push('ClientID set to ' + CLIENT_ID); }
+  var me = ensureAdmin_(sheet_(SHEETS.USERS));
+  changes.push(me ? ('Admin ensured: ' + me) : 'Could not read your e-mail to add you as Admin.');
+  CacheService.getScriptCache().remove('cfg_v1');
+  var msg = 'Done.\n\n- ' + changes.join('\n- ') +
+    '\n\nRemember to deploy: Deploy > Manage deployments > Edit > New version (Who has access = Anyone).';
+  try { SpreadsheetApp.getUi().alert('ICTD Digital File Library', msg, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) { console.log(msg); }
+}
+
 function showChecklist() {
   var msg = 'Setup finished.\n\nNext steps:\n' +
-    '1) Config sheet: paste your OAuth Client ID in ClientID.\n' +
-    '2) AllowedUsers sheet: add your team (Admin / Editor / Viewer).\n' +
+    '1) Client ID and your Admin account are set automatically (CLIENT_ID constant in Code.gs).\n' +
+    '2) AllowedUsers sheet: add the rest of your team (Admin / Editor / Viewer).\n' +
     '3) Deploy > New deployment > Web app: Execute as "Me", Who has access "Anyone".\n' +
-    '4) Copy the Web app URL into assets/js/config.js (WEB_APP_URL) and the Client ID into GOOGLE_CLIENT_ID.\n' +
+    '4) Copy the Web app URL into assets/js/config.js (WEB_APP_URL).\n' +
     '5) Optional: share the Drive root folder (Config > RootFolderID) with your ICTD group as Viewer.';
   try { SpreadsheetApp.getUi().alert('ICTD Digital File Library', msg, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) { console.log(msg); }
 }

@@ -2,6 +2,18 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v1.3 — 2026-11-05
+
+- Fixed setup() bug: inserting the AllowedUsers checkboxes inflated getLastRow(), so the Admin row was never created and sign-in was rejected for everyone. Admin is now detected and seeded by the Email column.
+- setup() now writes the OAuth Client ID into the Config sheet automatically from the new CLIENT_ID constant in Code.gs — no manual cell edit needed.
+- New menu item / function "Finish / repair setup" (finishSetup) re-applies the Client ID and ensures you are an Admin; safe to run repeatedly.
+- Version bumped to 1.3 (shown in header and footer).
+
+## v1.2 — 2026-11-04
+
+- Google OAuth Client ID set in `assets/js/config.js`; the sign-in screen now shows the "Sign in with Google" button instead of the setup notice.
+- Version bumped to 1.2 (shown in header and footer).
+
 ## v1.1 — 2026-11-04
 
 - Web App URL set in `assets/js/config.js` using the standard `/macros/s/…/exec` form instead of the domain-scoped `/a/macros/sr.edu.sa/s/…/exec` form, which redirects to a Google sign-in page and fails when called from GitHub Pages.
