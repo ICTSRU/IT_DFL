@@ -2,6 +2,16 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v1.5 — 2026-11-05
+
+- rebuildStorage() is now idempotent: it checks each drawer/folder's actual Drive parent and only (re)creates the ones not already under the target root, so re-running never creates duplicate folders and a partial run can be finished by simply running it again. Files already inside their folder are left in place.
+- Version bumped to 1.5 (shown in header and footer).
+
+## v1.4 — 2026-11-05
+
+- New STORAGE_FOLDER_ID constant + rebuildStorage() function/menu item: re-homes the whole cabinet (all drawer and folder subfolders, and any existing files) into a chosen folder — e.g. the shared ITOC folder — and repoints Config.RootFolderID. Safe to re-run.
+- Version bumped to 1.4 (shown in header and footer).
+
 ## v1.3 — 2026-11-05
 
 - Fixed setup() bug: inserting the AllowedUsers checkboxes inflated getLastRow(), so the Admin row was never created and sign-in was rejected for everyone. Admin is now detected and seeded by the Email column.

@@ -1,6 +1,6 @@
 /**
  * ICTD Digital File Library — Google Apps Script backend
- * Version 1.3 (2026-11-05)
+ * Version 1.5 (2026-11-05)
  *
  * Container-bound script: create a Google Sheet, open Extensions > Apps Script,
  * paste this file as Code.gs (and appsscript.json), run setup() once, then deploy as a Web app.
@@ -20,6 +20,13 @@ var VERSION = '1.3';
  * Leave it as '' to manage the ClientID cell manually instead.
  */
 var CLIENT_ID = '286826767897-ptof53iq20gn5964e8ogvpk0c71cu944.apps.googleusercontent.com';
+
+/**
+ * Optional: re-home all file storage into this folder (e.g. the shared ITOC folder),
+ * then run rebuildStorage() once. The folder must be shared with the account that runs
+ * the script (Editor). Leave '' to keep storage where it is.
+ */
+var STORAGE_FOLDER_ID = '1KjQry87vYE4BdjA_HTW9SLrX-Yw0Yf4b';
 
 var SHEETS = {
   CONFIG: 'Config',
@@ -599,6 +606,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('ICTD Library')
     .addItem('Run setup (first time)', 'setup')
     .addItem('Finish / repair setup (Client ID + make me Admin)', 'finishSetup')
+    .addItem('Re-home storage into STORAGE_FOLDER_ID', 'rebuildStorage')
     .addItem('Show deployment checklist', 'showChecklist')
     .addToUi();
 }
@@ -709,6 +717,86 @@ function finishSetup() {
   var msg = 'Done.\n\n- ' + changes.join('\n- ') +
     '\n\nRemember to deploy: Deploy > Manage deployments > Edit > New version (Who has access = Anyone).';
   try { SpreadsheetApp.getUi().alert('ICTD Digital File Library', msg, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) { console.log(msg); }
+}
+
+/**
+ * Re-home the whole cabinet into STORAGE_FOLDER_ID (or the current Config RootFolderID):
+ * recreates a Drive subfolder for every drawer and folder under the new root, updates the
+ * DriveFolderID columns, moves any existing document files across, and points Config.RootFolderID
+ * at the new root. Safe to run more than once. The target folder must be shared with the account
+ * running the script as Editor.
+ */
+/** Parent folder IDs of a Drive folder/file, or null if it cannot be opened. */
+function parentIds_(id) {
+  try {
+    var it = DriveApp.getFolderById(id).getParents(); var ids = [];
+    while (it.hasNext()) ids.push(it.next().getId());
+    return ids;
+  } catch (e) { return null; }
+}
+function hasParent_(id, parentId) {
+  var p = id ? parentIds_(id) : null;
+  return !!(p && p.indexOf(parentId) >= 0);
+}
+
+/**
+ * Idempotent: only (re)creates the Drive subfolders that are not already in the right place
+ * under the target root, so it can be run repeatedly and will never make duplicate folders.
+ * Also moves any document file that is not yet inside its folder. Target must be shared with
+ * the account running the script as Editor.
+ */
+function rebuildStorage() {
+  var targetId = (STORAGE_FOLDER_ID && STORAGE_FOLDER_ID.indexOf('PASTE') < 0 && STORAGE_FOLDER_ID.trim())
+    ? STORAGE_FOLDER_ID.trim() : String(getConfig_().RootFolderID || '').trim();
+  if (!targetId) throw err_('VALIDATION', 'Set STORAGE_FOLDER_ID at the top of Code.gs (or RootFolderID in Config) first.');
+  var me = Session.getEffectiveUser().getEmail() || 'the script account';
+  var root;
+  try { root = DriveApp.getFolderById(targetId); } catch (e) {
+    var m = 'Cannot open folder ' + targetId + '.\nShare it with ' + me + ' as Editor, then run again.';
+    try { SpreadsheetApp.getUi().alert('ICTD Digital File Library', m, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e2) {}
+    throw err_('NO_ACCESS', m);
+  }
+  return withLock_(function () {
+    setConfigValue_('RootFolderID', targetId);
+    var drawers = readAll_(SHEETS.DRAWERS);
+    var folders = readAll_(SHEETS.FOLDERS);
+    var docs = readAll_(SHEETS.DOCS);
+    var created = 0, kept = 0, moved = 0;
+    var drawerFolder = {};
+    drawers.forEach(function (d) {
+      var cur = String(d.DriveFolderID || '');
+      if (cur && hasParent_(cur, targetId)) { drawerFolder[d.DrawerID] = DriveApp.getFolderById(cur); kept++; return; }
+      var f = root.createFolder(label_(d));
+      updateRow_(SHEETS.DRAWERS, d._row, { DriveFolderID: f.getId() });
+      drawerFolder[d.DrawerID] = f; created++;
+    });
+    var folderFolder = {};
+    folders.forEach(function (fo) {
+      var parent = drawerFolder[fo.DrawerID];
+      if (!parent) return;
+      var pid = parent.getId();
+      var cur = String(fo.DriveFolderID || '');
+      if (cur && hasParent_(cur, pid)) { folderFolder[fo.FolderID] = DriveApp.getFolderById(cur); kept++; return; }
+      var f = parent.createFolder(label_(fo));
+      updateRow_(SHEETS.FOLDERS, fo._row, { DriveFolderID: f.getId() });
+      folderFolder[fo.FolderID] = f; created++;
+    });
+    docs.forEach(function (d) {
+      if (bool_(d.Deleted) || !d.DriveFileID) return;
+      var dest = folderFolder[d.FolderID];
+      if (!dest) return;
+      if (hasParent_(String(d.DriveFileID), dest.getId())) return;
+      try { DriveApp.getFileById(String(d.DriveFileID)).moveTo(dest); moved++; } catch (e) { console.warn('move failed ' + d.DocID + ': ' + e); }
+    });
+    CacheService.getScriptCache().remove('cfg_v1');
+    var msg = 'Storage re-homed into folder ' + targetId + '.\n' +
+      '- Subfolders created this run: ' + created + '\n' +
+      '- Already in place (kept): ' + kept + '\n' +
+      '- Files moved: ' + moved + '\n\n' +
+      'New uploads now land in this folder. Any leftover empty folders in the previous location can be deleted manually.';
+    try { SpreadsheetApp.getUi().alert('ICTD Digital File Library', msg, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) { console.log(msg); }
+    return msg;
+  });
 }
 
 function showChecklist() {
