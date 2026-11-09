@@ -2,6 +2,12 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v2.3 — 2026-11-09
+
+- Added an Admin-only in-app Audit Log (سجل التدقيق) reading the AccessLog: shows every change — sign-ins, denied attempts, document/folder/drawer add-edit-delete, user role changes, policy imports — with when, who (name, e-mail, role), a colour-coded action badge, and details, plus a quick text filter. Backend auditLog action is Admin-gated.
+- Renamed the Viewer role label to "مطّلع" (Arabic) to match ICTD wording; roles stay Admin/Editor/Viewer with the same server-enforced permissions.
+- Version bumped to 2.3.
+
 ## v2.2 — 2026-11-05
 
 - Bulk upload: editors can drop/select many files at once into any folder. Each file becomes its own document, with metadata auto-filled per file (title from the file name, date from the file's last-modified, owner = current user, version 1.0, default confidentiality) and editable per row before uploading. Files upload one by one with per-row status; reuses the existing addDocument backend (no backend change).

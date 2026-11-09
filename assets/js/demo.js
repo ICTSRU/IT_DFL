@@ -89,6 +89,17 @@
           case 'deleteDocument': i = find(docs, p.id); docs.splice(i, 1); return resolve({ id: p.id });
           case 'openDocument': return resolve({ url: 'about:blank', granted: true, demo: true });
           case 'listUsers': return resolve({ users: DEMO_USERS.slice(), me: 'demo@sr.edu.sa' });
+          case 'auditLog': {
+            var L = [
+              ['2026-11-09', '07:40:11', 'demo@sr.edu.sa', 'Demo User', 'Admin', 'signin', ''],
+              ['2026-11-09', '07:41:02', 'asma@sr.edu.sa', 'Asma Alolayan', 'Editor', 'add_doc', 'DOC-0031 Backup Plan 2026'],
+              ['2026-11-09', '07:42:20', 'demo@sr.edu.sa', 'Demo User', 'Admin', 'save_user', 'asma@sr.edu.sa → Editor'],
+              ['2026-11-09', '07:43:55', 'viewer@sr.edu.sa', 'Sample Viewer', '-', 'denied', 'Not in AllowedUsers'],
+              ['2026-11-09', '07:45:10', 'demo@sr.edu.sa', 'Demo User', 'Admin', 'delete_folder', 'FLD-0009 (+2 docs)'],
+              ['2026-11-09', '07:46:30', 'asma@sr.edu.sa', 'Asma Alolayan', 'Editor', 'open', 'DOC-0007 سياسة كلمات السر']
+            ].reverse().map(function (r) { return { date: r[0], time: r[1], email: r[2], name: r[3], role: r[4], action: r[5], detail: r[6] }; });
+            return resolve({ log: L, total: L.length });
+          }
           case 'saveUser': {
             var em = String(p.email || '').toLowerCase().trim();
             var ex = DEMO_USERS.filter(function (x) { return x.email === em; })[0];

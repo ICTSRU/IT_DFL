@@ -317,3 +317,12 @@ table.utbl .u-active{width:18px;height:18px;accent-color:var(--purple)}
 table.bktbl td .in{padding:5px 8px}
 table.bktbl .bk-st{font-size:12.5px;white-space:nowrap}
 :root[data-theme="dark"] table.bktbl td .in{background:var(--surface);color:var(--ink);border-color:var(--border)}
+.badge.au-ok{color:var(--ok);border-color:var(--ok);background:#e8f6f0}
+.badge.au-bad{color:var(--danger);border-color:var(--danger);background:#fdecea}
+.badge.au-warn{color:var(--warn);border-color:var(--warn);background:#fff4e8}
+.badge.au-info{color:var(--blue);border-color:var(--blue);background:var(--blue-light)}
+table.autbl td{font-size:13px}
+:root[data-theme="dark"] .badge.au-ok{background:#12251b}
+:root[data-theme="dark"] .badge.au-bad{background:#2a1416}
+:root[data-theme="dark"] .badge.au-warn{background:#2a1f12}
+:root[data-theme="dark"] .badge.au-info{background:#13263a}

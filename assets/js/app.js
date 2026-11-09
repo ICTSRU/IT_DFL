@@ -213,6 +213,7 @@
       '<div><h1>' + esc(t('appName')) + ' <span class="ver">v' + esc(CFG.VERSION) + '</span></h1><div class="sub">' + esc(t('appSub')) + '</div></div>' +
       '<div class="band-actions">' + (u ? '<span class="chip">' + icon('user') + '<bdi>' + esc(u.name) + '</bdi> · ' + esc(t('role_' + u.role)) + '</span>' : '') +
       (u && isAdmin() ? '<button class="btn ghost" data-act="admin-users">' + icon('shield-check') + esc(t('manageAccess')) + '</button>' : '') +
+      (u && isAdmin() ? '<button class="btn ghost" data-act="audit-log">' + icon('scroll-text') + esc(t('auditLog')) + '</button>' : '') +
       themeBtn('btn ghost') +
       '<button class="btn ghost" data-act="lang">' + icon('languages') + esc(t('lang')) + '</button>' +
       (u ? '<button class="btn ghost" data-act="signout">' + icon('log-out') + esc(t('signOut')) + '</button>' : '') + '</div></div></div>';
@@ -787,8 +788,35 @@
       '<button class="btn secondary" data-act="admin-users">' + esc(t('cancel')) + '</button><button class="btn danger" id="m-deluser" data-act="do-del-user" data-email="' + esc(email) + '">' + icon('trash-2') + esc(t('confirm')) + '</button>', { cls: 'sm', focus: false });
   }
 
+  /* ---------------- audit log (Admin) ---------------- */
+  var AUDIT = { rows: [], filter: '' };
+  function actionLabel(a) { var k = 'act_' + String(a || '').trim(); var v = t(k); return v === k ? (a || '') : v; }
+  function actionClass(a) { a = String(a || ''); if (a.indexOf('delete') >= 0 || a === 'denied') return 'bad'; if (a.indexOf('add') >= 0 || a === 'import_policies') return 'ok'; if (a.indexOf('edit') >= 0 || a === 'save_user') return 'warn'; return 'info'; }
+  function openAuditLog() {
+    AUDIT = { rows: [], filter: '' };
+    modal(t('auditTitle'),
+      '<div class="field" style="margin-bottom:10px"><input class="in" id="au-filter" placeholder="' + esc(t('auditFilter')) + '"></div><div id="au-body"><div class="empty">' + icon('loader-circle', 'spin') + ' ' + esc(t('loading')) + '</div></div>',
+      '<button class="btn secondary" data-act="close-modal">' + esc(t('close')) + '</button>', { sticky: true, focus: false, cls: 'wide' });
+    api('auditLog', { limit: 300 }).then(function (d) { AUDIT.rows = d.log || []; renderAudit(); }).catch(function (e) { var b = $('#au-body'); if (b) b.innerHTML = '<div class="empty">' + esc(t('errGeneric')) + '</div>'; handleErr(e); });
+  }
+  function renderAudit() {
+    var host = $('#au-body'); if (!host) return;
+    var f = norm(AUDIT.filter);
+    var list = AUDIT.rows.filter(function (r) { if (!f) return true; return norm([r.email, r.name, r.action, actionLabel(r.action), r.detail, r.role].join(' ')).indexOf(f) >= 0; });
+    if (!list.length) { host.innerHTML = '<div class="empty">' + esc(t('auditEmpty')) + '</div>'; return; }
+    var rows = list.map(function (r) {
+      return '<tr><td data-l="' + esc(t('colWhen')) + '"><span class="latin">' + esc(r.date) + ' ' + esc(r.time) + '</span></td>' +
+        '<td data-l="' + esc(t('colWho')) + '"><bdi>' + esc(r.name || '') + '</bdi><div class="path latin">' + esc(r.email || '') + (r.role ? ' · ' + esc(r.role) : '') + '</div></td>' +
+        '<td data-l="' + esc(t('colAction')) + '"><span class="badge au-' + actionClass(r.action) + '">' + esc(actionLabel(r.action)) + '</span></td>' +
+        '<td data-l="' + esc(t('colDetail')) + '"><bdi>' + esc(r.detail || '') + '</bdi></td></tr>';
+    }).join('');
+    host.innerHTML = '<p class="hint" style="margin:0 0 8px">' + esc(t('auditCount').replace('{n}', list.length)) + '</p>' +
+      '<div class="tbl-wrap"><table class="docs autbl"><thead><tr><th class="nosort">' + esc(t('colWhen')) + '</th><th class="nosort">' + esc(t('colWho')) + '</th><th class="nosort">' + esc(t('colAction')) + '</th><th class="nosort">' + esc(t('colDetail')) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
   var ACT = {
     'admin-users': openAdminUsers,
+    'audit-log': openAuditLog,
     'add-user': function () {
       var email = $('#nu-email').value.trim(), name = $('#nu-name').value.trim(), role = $('#nu-role').value;
       if (!email) { $('#m-err').textContent = t('errRequired'); return; }
@@ -863,6 +891,7 @@
   });
   document.addEventListener('focusout', function (e) { if (e.target.id === 'm-taginput' && e.target.value.trim()) { addFormTag(e.target.value); } });
   document.addEventListener('input', function (e) {
+    if (e.target.id === 'au-filter') { AUDIT.filter = e.target.value; renderAudit(); return; }
     if (e.target.id !== 'q') return;
     S.q = e.target.value; var c = $('#qclear'); if (c) c.classList.toggle('hidden', !S.q);
     clearTimeout(qTimer);

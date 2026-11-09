@@ -1,6 +1,6 @@
 /**
  * ICTD Digital File Library — Google Apps Script backend
- * Version 2.2 (2026-11-05)
+ * Version 2.3 (2026-11-09)
  *
  * Container-bound script: create a Google Sheet, open Extensions > Apps Script,
  * paste this file as Code.gs (and appsscript.json), run setup() once, then deploy as a Web app.
@@ -12,7 +12,7 @@
  *                 then the user is looked up in AllowedUsers (Admin / Editor / Viewer).
  */
 
-var VERSION = '2.2';
+var VERSION = '2.3';
 
 /**
  * Paste your OAuth Web Client ID here. setup() / finishSetup() write it into the
@@ -115,7 +115,8 @@ var ACTIONS = {
   openDocument: openDocument_,
   listUsers: listUsers_,
   saveUser: saveUser_,
-  deleteUser: deleteUser_
+  deleteUser: deleteUser_,
+  auditLog: listAuditLog_
 };
 
 /* ------------------------------------------------------------------ *
@@ -642,6 +643,16 @@ function usersOut_() {
 function listUsers_(u) {
   need_(isAdmin_(u), 'Only administrators can manage access.');
   return { users: usersOut_(), me: u.email };
+}
+
+function listAuditLog_(u, p) {
+  need_(isAdmin_(u), 'Only administrators can view the audit log.');
+  var limit = Math.min(Math.max(Number(p && p.limit) || 300, 1), 1000);
+  var rows = readAll_(SHEETS.LOG).map(function (r) {
+    return { date: r.Date, time: r.Time, email: r.Email, name: r.Name, role: r.Role, action: r.Action, detail: r.Detail };
+  });
+  rows.reverse(); // AccessLog is appended chronologically → newest first
+  return { log: rows.slice(0, limit), total: rows.length };
 }
 
 function validEmail_(e) {
