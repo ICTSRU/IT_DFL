@@ -20,9 +20,14 @@
   var folders = [];
   folderDefs.forEach(function (d) {
     for (var i = 1; i < d.length; i++) {
-      folders.push({ id: 'FLD-' + ('000' + (folders.length + 1)).slice(-4), drawerId: 'DRW-000' + d[0], nameAr: d[i][0], nameEn: d[i][1], order: i, active: true });
+      folders.push({ id: 'FLD-' + ('000' + (folders.length + 1)).slice(-4), drawerId: 'DRW-000' + d[0], nameAr: d[i][0], nameEn: d[i][1], order: i, active: true,
+        access: 'open', myRole: 'Admin', canManage: true, canEdit: true });
     }
   });
+  // demo per-folder grants: { folderId: [ {email,name,role,active} ] }
+  var GRANTS = {};
+  folders[1].access = 'restricted';
+  GRANTS[folders[1].id] = [{ email: 'asma@sr.edu.sa', name: 'Asma Alolayan', role: 'Editor', active: true }];
   var owners = ['Mohamed ElMahdy', 'Asma Alolayan', 'Ammar Alrowedan', 'Azzam Alaqeel'];
   var samples = [
     ['Information Security Policy v3', 0, 'pdf', ['security', 'iso27001', 'approved'], 'Internal'],
@@ -110,6 +115,29 @@
           case 'deleteUser': {
             DEMO_USERS = DEMO_USERS.filter(function (x) { return x.email !== String(p.email || '').toLowerCase().trim(); });
             return resolve({ users: DEMO_USERS.slice(), me: 'demo@sr.edu.sa' });
+          }
+          case 'listFolderAccess':
+          case 'setFolderAccess':
+          case 'saveFolderGrant':
+          case 'deleteFolderGrant': {
+            var fi = find(folders, p.folderId);
+            if (fi < 0) return reject({ code: 'NOT_FOUND', message: 'Folder not found.' });
+            var fo = folders[fi];
+            GRANTS[fo.id] = GRANTS[fo.id] || [];
+            if (action === 'setFolderAccess') { fo.access = p.access === 'restricted' ? 'restricted' : 'open'; }
+            if (action === 'saveFolderGrant') {
+              var gem = String(p.email || '').toLowerCase().trim();
+              if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(gem)) return reject({ code: 'VALIDATION', message: 'Please enter a valid e-mail address.' });
+              var gex = GRANTS[fo.id].filter(function (x) { return x.email === gem; })[0];
+              var gnm = (DEMO_USERS.filter(function (x) { return x.email === gem; })[0] || {}).name || '';
+              if (gex) { gex.role = p.role || gex.role; gex.active = p.active !== undefined ? !!p.active : gex.active; }
+              else GRANTS[fo.id].push({ email: gem, name: gnm, role: p.role || 'Viewer', active: p.active !== undefined ? !!p.active : true });
+            }
+            if (action === 'deleteFolderGrant') {
+              GRANTS[fo.id] = GRANTS[fo.id].filter(function (x) { return x.email !== String(p.email || '').toLowerCase().trim(); });
+            }
+            return resolve(JSON.parse(JSON.stringify({ folderId: fo.id, nameAr: fo.nameAr, nameEn: fo.nameEn, access: fo.access || 'open',
+              grants: GRANTS[fo.id].slice().sort(function (a, b) { return a.email.localeCompare(b.email); }), me: 'demo@sr.edu.sa', users: DEMO_USERS.slice() })));
           }
         }
         reject({ code: 'BAD_REQUEST', message: 'Unknown action' });

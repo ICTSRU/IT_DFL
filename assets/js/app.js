@@ -48,6 +48,9 @@
   function cntLabel(n) { return n + ' ' + (n === 1 ? t('doc1') : t('docN')); }
   function isAdmin() { return S.user && S.user.role === 'Admin'; }
   function isEditor() { return S.user && (S.user.role === 'Admin' || S.user.role === 'Editor'); }
+  // folder-level effective rights (server supplies canManage/canEdit per folder; fall back to global role)
+  function fManage(f) { return !!(f && (f.canManage !== undefined ? f.canManage : isAdmin())); }
+  function fEdit(f) { return !!(f && (f.canEdit !== undefined ? f.canEdit : isEditor())); }
   function fileIcon(d) {
     var ext = (d.fileName || '').split('.').pop().toLowerCase();
     if (/^(pdf|doc|docx|txt|rtf|odt|ppt|pptx)$/.test(ext)) return 'file-text';
@@ -379,9 +382,12 @@
       '<div class="drawer-open" style="--accent:' + safeColor(d.color) + '"><span class="drawer-plate">' + icon(iconName(d.icon)) + '<bdi>' + esc(nm(d)) + '</bdi></span><div class="folders">';
     fl.forEach(function (f) {
       var sub = nm2(f);
-      html += '<div class="manila' + (f.active ? '' : ' inactive') + '" role="button" tabindex="0" data-act="open-folder" data-id="' + esc(f.id) + '"><span class="nm"><bdi>' + esc(nm(f)) + '</bdi></span>' +
+      html += '<div class="manila' + (f.active ? '' : ' inactive') + (f.access === 'restricted' ? ' locked' : '') + '" role="button" tabindex="0" data-act="open-folder" data-id="' + esc(f.id) + '"><span class="nm">' +
+        (f.access === 'restricted' ? '<span class="lock" title="' + esc(t('accRestricted')) + '" aria-label="' + esc(t('accRestricted')) + '">' + icon('lock') + '</span>' : '') +
+        '<bdi>' + esc(nm(f)) + '</bdi></span>' +
         (sub ? '<span class="en"><bdi>' + esc(sub) + '</bdi></span>' : '') +
-        (isAdmin() ? '<button class="icon-btn pen" data-act="edit-folder" data-id="' + esc(f.id) + '" aria-label="' + esc(t('edit')) + '">' + icon('pencil') + '</button>' +
+        (fManage(f) ? '<button class="icon-btn key" data-act="folder-access" data-id="' + esc(f.id) + '" aria-label="' + esc(t('folderAccess')) + '" title="' + esc(t('folderAccess')) + '">' + icon('key-round') + '</button>' +
+          '<button class="icon-btn pen" data-act="edit-folder" data-id="' + esc(f.id) + '" aria-label="' + esc(t('edit')) + '">' + icon('pencil') + '</button>' +
           '<button class="icon-btn del2 danger" data-act="del-folder" data-id="' + esc(f.id) + '" aria-label="' + esc(t('delFolder')) + '" title="' + esc(t('delFolder')) + '">' + icon('trash-2') + '</button>' : '') +
         '<span class="cnt">' + (S.cnt.f[f.id] || 0) + '</span></div>';
     });
@@ -395,10 +401,12 @@
     var d = S.dById[f.drawerId] || {};
     var list = S.docs.filter(function (x) { return x.folderId === id; });
     return crumbs([[t('cabinet'), '#/'], [nm(d), '#/d/' + d.id], [nm(f), '']]) +
-      '<div class="page-head"><h2>' + icon('folder-open') + ' <bdi>' + esc(nm(f)) + '</bdi></h2><span class="chip" style="background:var(--purple-light);color:var(--purple);border-color:var(--border)">' + esc(cntLabel(list.length)) + '</span><span class="grow"></span>' +
-      (isEditor() ? '<button class="btn secondary" data-act="bulk-upload" data-drawer="' + esc(d.id) + '" data-folder="' + esc(id) + '">' + icon('upload') + esc(t('bulkUpload')) + '</button>' : '') +
-      (isEditor() ? '<button class="btn" data-act="add-doc" data-drawer="' + esc(d.id) + '" data-folder="' + esc(id) + '">' + icon('file-plus') + esc(t('addDoc')) + '</button>' : '') +
-      (isAdmin() ? '<button class="btn secondary" data-act="edit-folder" data-id="' + esc(id) + '">' + icon('pencil') + esc(t('edit')) + '</button>' : '') + '</div>' +
+      '<div class="page-head"><h2>' + icon('folder-open') + ' <bdi>' + esc(nm(f)) + '</bdi></h2><span class="chip" style="background:var(--purple-light);color:var(--purple);border-color:var(--border)">' + esc(cntLabel(list.length)) + '</span>' +
+      (f.access === 'restricted' ? '<span class="chip lockchip">' + icon('lock') + esc(t('accRestricted')) + '</span>' : '') + '<span class="grow"></span>' +
+      (fEdit(f) ? '<button class="btn secondary" data-act="bulk-upload" data-drawer="' + esc(d.id) + '" data-folder="' + esc(id) + '">' + icon('upload') + esc(t('bulkUpload')) + '</button>' : '') +
+      (fEdit(f) ? '<button class="btn" data-act="add-doc" data-drawer="' + esc(d.id) + '" data-folder="' + esc(id) + '">' + icon('file-plus') + esc(t('addDoc')) + '</button>' : '') +
+      (fManage(f) ? '<button class="btn secondary" data-act="folder-access" data-id="' + esc(id) + '">' + icon('key-round') + esc(t('folderAccess')) + '</button>' : '') +
+      (fManage(f) ? '<button class="btn secondary" data-act="edit-folder" data-id="' + esc(id) + '">' + icon('pencil') + esc(t('edit')) + '</button>' : '') + '</div>' +
       docTable(list, false, t('emptyFolder'));
   }
 
@@ -791,7 +799,7 @@
   /* ---------------- audit log (Admin) ---------------- */
   var AUDIT = { rows: [], filter: '' };
   function actionLabel(a) { var k = 'act_' + String(a || '').trim(); var v = t(k); return v === k ? (a || '') : v; }
-  function actionClass(a) { a = String(a || ''); if (a.indexOf('delete') >= 0 || a === 'denied') return 'bad'; if (a.indexOf('add') >= 0 || a === 'import_policies') return 'ok'; if (a.indexOf('edit') >= 0 || a === 'save_user') return 'warn'; return 'info'; }
+  function actionClass(a) { a = String(a || ''); if (a.indexOf('delete') >= 0 || a === 'denied' || a === 'grant_remove') return 'bad'; if (a.indexOf('add') >= 0 || a === 'import_policies') return 'ok'; if (a.indexOf('edit') >= 0 || a === 'save_user' || a === 'grant_save' || a === 'folder_access') return 'warn'; return 'info'; }
   function openAuditLog() {
     AUDIT = { rows: [], filter: '' };
     modal(t('auditTitle'),
@@ -814,9 +822,69 @@
       '<div class="tbl-wrap"><table class="docs autbl"><thead><tr><th class="nosort">' + esc(t('colWhen')) + '</th><th class="nosort">' + esc(t('colWho')) + '</th><th class="nosort">' + esc(t('colAction')) + '</th><th class="nosort">' + esc(t('colDetail')) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
 
+  /* ---------------- folder access (folder managers / admins) ---------------- */
+  var FACC = { folderId: '', access: 'open', grants: [], users: [] };
+  function openFolderAccess(folderId) {
+    FACC = { folderId: folderId, access: 'open', grants: [], users: [] };
+    var f = S.fById[folderId] || {};
+    modal(t('folderAccess') + ' — ' + nm(f),
+      '<div class="err" id="fa-err" role="alert"></div><div id="fa-body"><div class="empty">' + icon('loader-circle', 'spin') + ' ' + esc(t('loading')) + '</div></div>',
+      '<button class="btn secondary" data-act="close-modal">' + esc(t('close')) + '</button>', { sticky: true, focus: false });
+    api('listFolderAccess', { folderId: folderId }).then(applyFacc).catch(function (e) { handleErr(e, $('#fa-err')); var b = $('#fa-body'); if (b) b.innerHTML = ''; });
+  }
+  function applyFacc(d) { FACC.access = d.access || 'open'; FACC.grants = d.grants || []; FACC.users = d.users || []; renderFolderAccess(); }
+  function renderFolderAccess() {
+    var body = $('#fa-body'); if (!body) return;
+    var restricted = FACC.access === 'restricted';
+    var rows = FACC.grants.map(function (g) {
+      return '<tr data-email="' + esc(g.email) + '"><td data-l="' + esc(t('colEmail2')) + '"><span class="latin">' + esc(g.email) + '</span>' +
+        (g.name ? '<div class="path"><bdi>' + esc(g.name) + '</bdi></div>' : '') + '</td>' +
+        '<td data-l="' + esc(t('colRole')) + '"><select class="in g-role">' + roleOptions(g.role) + '</select></td>' +
+        '<td data-l="' + esc(t('colActive')) + '" style="text-align:center"><input type="checkbox" class="g-active"' + (g.active ? ' checked' : '') + '></td>' +
+        '<td class="actions"><button class="icon-btn" data-act="save-grant" aria-label="' + esc(t('save')) + '" title="' + esc(t('save')) + '">' + icon('check') + '</button>' +
+        '<button class="icon-btn danger" data-act="rm-grant" aria-label="' + esc(t('del')) + '" title="' + esc(t('del')) + '">' + icon('trash-2') + '</button></td></tr>';
+    }).join('');
+    var dl = FACC.users.map(function (x) { return '<option value="' + esc(x.email) + '">' + esc(x.name || '') + '</option>'; }).join('');
+    body.innerHTML =
+      '<div class="acc-mode"><span class="acc-mode-l">' + icon(restricted ? 'lock' : 'lock-open') + esc(t('accMode')) + '</span>' +
+      '<div class="seg"><button class="' + (restricted ? '' : 'on') + '" data-act="set-access" data-v="open">' + esc(t('accOpen')) + '</button>' +
+      '<button class="' + (restricted ? 'on' : '') + '" data-act="set-access" data-v="restricted">' + esc(t('accRestricted')) + '</button></div></div>' +
+      '<p class="hint" style="margin:0 0 12px">' + esc(t(restricted ? 'accRestrictedHelp' : 'accOpenHelp')) + '</p>' +
+      '<h4 class="acc-h">' + esc(t('grantsTitle')) + '</h4>' +
+      '<div class="adduser"><input class="in latin" id="ng-email" list="ng-users" placeholder="' + esc(t('emailPh')) + '"><datalist id="ng-users">' + dl + '</datalist>' +
+      '<select class="in" id="ng-role">' + roleOptions('Viewer') + '</select><button class="btn" data-act="add-grant">' + icon('user-plus') + esc(t('addGrant')) + '</button></div>' +
+      (FACC.grants.length ? '<div class="tbl-wrap"><table class="docs utbl"><thead><tr><th class="nosort">' + esc(t('colEmail2')) + '</th><th class="nosort">' + esc(t('colRole')) + '</th><th class="nosort">' + esc(t('colActive')) + '</th><th class="nosort">' + esc(t('colActions')) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">' + esc(t('noGrants')) + '</div>');
+  }
+  function faccCall(action, payload, btn) {
+    var box = $('#fa-err'); if (box) box.textContent = '';
+    if (btn) btn.disabled = true;
+    payload.folderId = FACC.folderId;
+    return api(action, payload).then(function (d) {
+      applyFacc(d);
+      var f = S.fById[FACC.folderId]; if (f) f.access = FACC.access; // keep manila lock badge in sync
+      toast(t('accSaved'));
+    }).catch(function (e) { if (btn) btn.disabled = false; handleErr(e, $('#fa-err')); });
+  }
+
   var ACT = {
     'admin-users': openAdminUsers,
     'audit-log': openAuditLog,
+    'folder-access': function (el) { closeModal(); openFolderAccess(el.getAttribute('data-id')); },
+    'set-access': function (el) { var v = el.getAttribute('data-v'); if (v === FACC.access) return; faccCall('setFolderAccess', { access: v }, el); },
+    'add-grant': function () {
+      var email = $('#ng-email').value.trim(), role = $('#ng-role').value;
+      if (!email) { $('#fa-err').textContent = t('errRequired'); return; }
+      faccCall('saveFolderGrant', { email: email, role: role, active: true });
+    },
+    'save-grant': function (el) {
+      var tr = el.closest('tr'); if (!tr) return;
+      faccCall('saveFolderGrant', { email: tr.getAttribute('data-email'), role: $('.g-role', tr).value, active: $('.g-active', tr).checked }, el);
+    },
+    'rm-grant': function (el) {
+      var tr = el.closest('tr'); if (!tr) return;
+      faccCall('deleteFolderGrant', { email: tr.getAttribute('data-email') }, el);
+    },
     'add-user': function () {
       var email = $('#nu-email').value.trim(), name = $('#nu-name').value.trim(), role = $('#nu-role').value;
       if (!email) { $('#m-err').textContent = t('errRequired'); return; }

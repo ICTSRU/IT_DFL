@@ -2,6 +2,16 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v2.4 — 2026-11-09
+
+- Added **folder-level access control** (صلاحيات مفروضة على الفولدر). Each folder now has an access mode — **عام / Open** or **مقيّد / Restricted** — and a per-folder grants list that a folder manager (or a global Admin) opens from the 🔑 button on the folder card or inside the folder.
+  - *Open* folder: visible to everyone per their global role; individual grants can **raise** a person's role on that folder only (e.g. make a Viewer an Editor there).
+  - *Restricted* folder: hidden from everyone except global Admins and the people explicitly granted; each grant sets their role (مدير/محرّر/مطّلع) inside that folder.
+- Permissions are **enforced server-side**: `bootstrap` filters folders and documents by each user's effective folder role, and add/edit/delete-document, edit/delete-folder, and open-document all re-check the folder role. New `FolderGrants` sheet + `Access` column on `Folders` are created automatically on first run.
+- Every change is written to the **Audit Log**: `folder_access` (mode change), `grant_save` (grant added/updated), `grant_remove` (grant revoked). Deleting a folder also cleans up its grants.
+- Restricted folders show a lock badge on the cabinet card and in the folder header.
+- Version bumped to 2.4.
+
 ## v2.3 — 2026-11-09
 
 - Added an Admin-only in-app Audit Log (سجل التدقيق) reading the AccessLog: shows every change — sign-ins, denied attempts, document/folder/drawer add-edit-delete, user role changes, policy imports — with when, who (name, e-mail, role), a colour-coded action badge, and details, plus a quick text filter. Backend auditLog action is Admin-gated.

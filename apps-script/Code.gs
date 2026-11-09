@@ -1,6 +1,6 @@
 /**
  * ICTD Digital File Library — Google Apps Script backend
- * Version 2.3 (2026-11-09)
+ * Version 2.4 (2026-11-09)
  *
  * Container-bound script: create a Google Sheet, open Extensions > Apps Script,
  * paste this file as Code.gs (and appsscript.json), run setup() once, then deploy as a Web app.
@@ -12,7 +12,7 @@
  *                 then the user is looked up in AllowedUsers (Admin / Editor / Viewer).
  */
 
-var VERSION = '2.3';
+var VERSION = '2.4';
 
 /**
  * Paste your OAuth Web Client ID here. setup() / finishSetup() write it into the
@@ -34,16 +34,18 @@ var SHEETS = {
   FOLDERS: 'Folders',
   DOCS: 'Documents',
   USERS: 'AllowedUsers',
+  GRANTS: 'FolderGrants',
   LOG: 'AccessLog'
 };
 
 var HEADERS = {
   Config: ['Key', 'Value', 'Note'],
   Drawers: ['DrawerID', 'NameAr', 'NameEn', 'Icon', 'Color', 'Order', 'Active', 'Description', 'DriveFolderID', 'CreatedBy', 'CreatedAt'],
-  Folders: ['FolderID', 'DrawerID', 'NameAr', 'NameEn', 'Order', 'Active', 'DriveFolderID', 'CreatedBy', 'CreatedAt'],
+  Folders: ['FolderID', 'DrawerID', 'NameAr', 'NameEn', 'Order', 'Active', 'DriveFolderID', 'CreatedBy', 'CreatedAt', 'Access'],
   Documents: ['DocID', 'Title', 'DrawerID', 'FolderID', 'DocDate', 'Owner', 'OwnerEmail', 'Tags', 'Description', 'Version', 'Status',
     'Confidentiality', 'FileName', 'MimeType', 'SizeBytes', 'DriveFileID', 'DriveURL', 'CreatedBy', 'CreatedAt', 'UpdatedBy', 'UpdatedAt', 'Deleted'],
   AllowedUsers: ['Email', 'Name', 'Role', 'Active', 'AddedAt'],
+  FolderGrants: ['GrantID', 'FolderID', 'Email', 'Role', 'Active', 'AddedBy', 'AddedAt'],
   AccessLog: ['Date', 'Time', 'Email', 'Name', 'Role', 'Action', 'Detail']
 };
 
@@ -116,7 +118,11 @@ var ACTIONS = {
   listUsers: listUsers_,
   saveUser: saveUser_,
   deleteUser: deleteUser_,
-  auditLog: listAuditLog_
+  auditLog: listAuditLog_,
+  listFolderAccess: listFolderAccess_,
+  setFolderAccess: setFolderAccess_,
+  saveFolderGrant: saveFolderGrant_,
+  deleteFolderGrant: deleteFolderGrant_
 };
 
 /* ------------------------------------------------------------------ *
@@ -310,30 +316,80 @@ function drawerOut_(d) {
     order: Number(d.Order) || 0, active: bool_(d.Active), description: d.Description || '' };
 }
 
-function folderOut_(f) {
-  return { id: f.FolderID, drawerId: f.DrawerID, nameAr: f.NameAr, nameEn: f.NameEn, order: Number(f.Order) || 0, active: bool_(f.Active) };
+/* ---- Folder-level access control (ACL) ---- */
+var RANK = { Viewer: 1, Editor: 2, Admin: 3 };
+
+/** Make sure the FolderGrants sheet and the Folders "Access" column exist (one-time). */
+function ensureAcl_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('acl_ready') === '1') return;
+  var book = ss_();
+  if (!book.getSheetByName(SHEETS.GRANTS)) {
+    var sh = book.insertSheet(SHEETS.GRANTS);
+    sh.getRange(1, 1, 1, HEADERS.FolderGrants.length).setValues([HEADERS.FolderGrants]);
+    try { styleHeader_(sh, HEADERS.FolderGrants.length); } catch (e) { /* styleHeader defined later; ignore */ }
+    sh.setFrozenRows(1);
+  }
+  var fo = book.getSheetByName(SHEETS.FOLDERS);
+  if (fo) { var col = HEADERS.Folders.indexOf('Access') + 1; if (String(fo.getRange(1, col).getValue()) !== 'Access') fo.getRange(1, col).setValue('Access'); }
+  props.setProperty('acl_ready', '1');
 }
 
-function canEditDoc_(u, d) {
-  if (isAdmin_(u)) return true;
-  if (u.role !== 'Editor') return false;
-  return String(d.CreatedBy).toLowerCase() === u.email || String(d.OwnerEmail).toLowerCase() === u.email;
+function readGrants_() { try { return readAll_(SHEETS.GRANTS); } catch (e) { return []; } }
+
+/** { folderId: { email: {role, active} } } */
+function grantsIndex_() {
+  var idx = {};
+  readGrants_().forEach(function (g) {
+    if (!g.FolderID || !g.Email) return;
+    (idx[g.FolderID] = idx[g.FolderID] || {})[String(g.Email).toLowerCase().trim()] =
+      { role: ROLES.indexOf(String(g.Role)) >= 0 ? String(g.Role) : 'Viewer', active: bool_(g.Active) };
+  });
+  return idx;
 }
 
-function docVisible_(u, d) {
+function folderAccessMode_(f) { return String(f.Access || 'open').toLowerCase() === 'restricted' ? 'restricted' : 'open'; }
+
+/** Effective role of user u on folder f: 'Admin' | 'Editor' | 'Viewer' | null (no access). */
+function effFolderRole_(u, f, idx) {
+  if (isAdmin_(u)) return 'Admin';
+  var g = idx[f.FolderID] && idx[f.FolderID][u.email];
+  var grantRole = (g && g.active) ? g.role : null;
+  if (folderAccessMode_(f) === 'restricted') return grantRole; // only granted users (or global admins)
+  var base = u.role === 'Editor' ? 'Editor' : (u.role === 'Viewer' ? 'Viewer' : null);
+  if (!base) return grantRole;
+  if (!grantRole) return base;
+  return RANK[grantRole] >= RANK[base] ? grantRole : base;
+}
+function myFolderRole_(u, f) { return f ? effFolderRole_(u, f, grantsIndex_()) : null; }
+function folderById_(id) { return readAll_(SHEETS.FOLDERS).filter(function (x) { return x.FolderID === id; })[0]; }
+
+function folderOut_(f, myRole) {
+  return { id: f.FolderID, drawerId: f.DrawerID, nameAr: f.NameAr, nameEn: f.NameEn, order: Number(f.Order) || 0, active: bool_(f.Active),
+    access: folderAccessMode_(f), myRole: myRole || null, canManage: myRole === 'Admin', canEdit: myRole === 'Admin' || myRole === 'Editor' };
+}
+
+function canEditDoc_(u, d, role) {
+  if (role === 'Admin') return true;
+  if (role === 'Editor') return String(d.CreatedBy).toLowerCase() === u.email || String(d.OwnerEmail).toLowerCase() === u.email;
+  return false;
+}
+
+function docVisible_(u, d, role) {
   if (bool_(d.Deleted)) return false;
-  if (isEditor_(u)) return true;
+  if (role == null) return false;
   if (d.Confidentiality !== 'Confidential') return true;
+  if (role === 'Admin' || role === 'Editor') return true;
   return String(d.CreatedBy).toLowerCase() === u.email || String(d.OwnerEmail).toLowerCase() === u.email;
 }
 
-function docOut_(u, d) {
+function docOut_(u, d, role) {
   return {
     id: d.DocID, title: d.Title, drawerId: d.DrawerID, folderId: d.FolderID, date: d.DocDate, owner: d.Owner, ownerEmail: d.OwnerEmail,
     tags: String(d.Tags || '').split(',').map(function (t) { return t.trim(); }).filter(Boolean),
     description: d.Description || '', version: String(d.Version || ''), status: d.Status || 'Active', conf: d.Confidentiality || 'Internal',
     fileName: d.FileName || '', mime: d.MimeType || '', size: Number(d.SizeBytes) || 0, hasFile: !!(d.DriveURL),
-    createdBy: d.CreatedBy, createdAt: d.CreatedAt, updatedBy: d.UpdatedBy, updatedAt: d.UpdatedAt, canEdit: canEditDoc_(u, d)
+    createdBy: d.CreatedBy, createdAt: d.CreatedAt, updatedBy: d.UpdatedBy, updatedAt: d.UpdatedAt, canEdit: canEditDoc_(u, d, role)
   };
 }
 
@@ -342,21 +398,27 @@ function docOut_(u, d) {
  * ------------------------------------------------------------------ */
 
 function bootstrap_(u, p) {
+  ensureAcl_();
   if (p.fresh) log_(u, 'signin', '');
   var cfg = getConfig_();
   var admin = isAdmin_(u);
+  var idx = grantsIndex_();
   var drawers = readAll_(SHEETS.DRAWERS).filter(function (d) { return admin || bool_(d.Active); });
-  var folders = readAll_(SHEETS.FOLDERS).filter(function (f) { return admin || bool_(f.Active); });
-  var okFolder = {};
-  folders.forEach(function (f) { okFolder[f.FolderID] = true; });
-  var docs = readAll_(SHEETS.DOCS).filter(function (d) { return docVisible_(u, d) && (admin || okFolder[d.FolderID]); });
+  var folderRole = {}, folders = [];
+  readAll_(SHEETS.FOLDERS).forEach(function (f) {
+    if (!admin && !bool_(f.Active)) return;
+    var r = effFolderRole_(u, f, idx);
+    if (r == null) return;              // no access to this folder
+    folderRole[f.FolderID] = r; folders.push(f);
+  });
+  var docs = readAll_(SHEETS.DOCS).filter(function (d) { var r = folderRole[d.FolderID]; return r != null && docVisible_(u, d, r); });
   return {
     user: { email: u.email, name: u.name, role: u.role },
     config: { libraryName: cfg.LibraryName || 'ICTD Digital File Library', maxUploadMB: Number(cfg.MaxUploadMB) || 20,
       defaultConf: CONFS.indexOf(cfg.DefaultConfidentiality) >= 0 ? cfg.DefaultConfidentiality : 'Internal', version: VERSION },
     drawers: drawers.map(drawerOut_),
-    folders: folders.map(folderOut_),
-    documents: docs.map(function (d) { return docOut_(u, d); })
+    folders: folders.map(function (f) { return folderOut_(f, folderRole[f.FolderID]); }),
+    documents: docs.map(function (d) { return docOut_(u, d, folderRole[d.FolderID]); })
   };
 }
 
@@ -434,32 +496,33 @@ function addFolder_(u, p) {
     var id = nextId_('FLD');
     var f = parent.createFolder(label_({ NameEn: n.en, NameAr: n.ar }));
     var row = { FolderID: id, DrawerID: drawer.DrawerID, NameAr: safe_(n.ar), NameEn: safe_(n.en), Order: siblings.length + 1, Active: true,
-      DriveFolderID: f.getId(), CreatedBy: u.email, CreatedAt: safe_(stamp_().date) };
+      DriveFolderID: f.getId(), CreatedBy: u.email, CreatedAt: safe_(stamp_().date), Access: 'open' };
     appendObj_(SHEETS.FOLDERS, row);
     log_(u, 'add_folder', id + ' ' + (n.en || n.ar));
-    return folderOut_({ FolderID: id, DrawerID: drawer.DrawerID, NameAr: n.ar, NameEn: n.en, Order: row.Order, Active: true });
+    return folderOut_({ FolderID: id, DrawerID: drawer.DrawerID, NameAr: n.ar, NameEn: n.en, Order: row.Order, Active: true, Access: 'open' }, isAdmin_(u) ? 'Admin' : 'Editor');
   });
 }
 
 function updateFolder_(u, p) {
-  need_(isAdmin_(u), 'Only administrators can edit folders.');
   return withLock_(function () {
     var f = readAll_(SHEETS.FOLDERS).filter(function (x) { return x.FolderID === p.id; })[0];
     if (!f) throw err_('NOT_FOUND', 'Folder not found.');
+    need_(myFolderRole_(u, f) === 'Admin', 'Only administrators or folder managers can edit this folder.');
     var n = names_(p);
     var patch = { NameAr: safe_(n.ar), NameEn: safe_(n.en), Active: !!p.active };
     if (p.order !== undefined && p.order !== '') patch.Order = Number(p.order) || 0;
     updateRow_(SHEETS.FOLDERS, f._row, patch);
     log_(u, 'edit_folder', f.FolderID);
-    return folderOut_(readAll_(SHEETS.FOLDERS).filter(function (x) { return x.FolderID === p.id; })[0]);
+    var fresh = readAll_(SHEETS.FOLDERS).filter(function (x) { return x.FolderID === p.id; })[0];
+    return folderOut_(fresh, myFolderRole_(u, fresh));
   });
 }
 
 function deleteFolder_(u, p) {
-  need_(isAdmin_(u), 'Only administrators can delete folders.');
   return withLock_(function () {
     var f = readAll_(SHEETS.FOLDERS).filter(function (x) { return x.FolderID === p.id; })[0];
     if (!f) throw err_('NOT_FOUND', 'Folder not found.');
+    need_(myFolderRole_(u, f) === 'Admin', 'Only administrators or folder managers can delete this folder.');
     var docs = readAll_(SHEETS.DOCS).filter(function (d) { return d.FolderID === f.FolderID && !bool_(d.Deleted); });
     if (docs.length && !p.force) throw err_('HAS_DOCS', String(docs.length));
     var s = stamp_(), deletedDocs = [];
@@ -467,8 +530,10 @@ function deleteFolder_(u, p) {
       updateRow_(SHEETS.DOCS, d._row, { Deleted: true, UpdatedBy: u.email, UpdatedAt: safe_(s.date + ' ' + s.time) });
       deletedDocs.push(d.DocID);
     });
-    // remove the folder row
+    // remove the folder row and any access grants on it
     sheet_(SHEETS.FOLDERS).deleteRow(f._row);
+    var gsh = ss_().getSheetByName(SHEETS.GRANTS);
+    if (gsh) readGrants_().filter(function (g) { return g.FolderID === f.FolderID; }).sort(function (a, b) { return b._row - a._row; }).forEach(function (g) { gsh.deleteRow(g._row); });
     // trash the Drive subfolder only if it is now empty
     if (f.DriveFolderID) {
       try {
@@ -524,10 +589,11 @@ function fileIdFromUrl_(url) {
 }
 
 function addDocument_(u, p) {
-  need_(isEditor_(u), 'Only editors can add documents.');
   var v = validateDocFields_(p);
   return withLock_(function () {
     var loc = resolveFolder_(p);
+    var role = myFolderRole_(u, loc.folder);
+    need_(role === 'Admin' || role === 'Editor', 'You do not have permission to add documents to this folder.');
     var cfg = getConfig_();
     var fileName = '', mime = '', size = 0, fileId = '', url = '';
     if (p.upload && p.upload.data) {
@@ -563,7 +629,7 @@ function addDocument_(u, p) {
     log_(u, 'add_doc', id + ' ' + v.title);
     row.Title = v.title; row.DocDate = v.date; row.Owner = v.owner; row.Tags = v.tags; row.Description = v.description;
     row.Version = v.version; row.FileName = fileName; row.MimeType = mime; row.CreatedAt = s.date + ' ' + s.time;
-    return docOut_(u, row);
+    return docOut_(u, row, role);
   });
 }
 
@@ -572,8 +638,14 @@ function updateDocument_(u, p) {
   return withLock_(function () {
     var d = readAll_(SHEETS.DOCS).filter(function (x) { return x.DocID === p.id && !bool_(x.Deleted); })[0];
     if (!d) throw err_('NOT_FOUND', 'Document not found.');
-    need_(canEditDoc_(u, d), 'You can only edit documents you created or own.');
+    var idx = grantsIndex_();
+    var srcRole = effFolderRole_(u, folderById_(d.FolderID) || { FolderID: d.FolderID }, idx);
+    need_(canEditDoc_(u, d, srcRole), 'You can only edit documents you created or own.');
     var loc = resolveFolder_(p);
+    if (loc.folder.FolderID !== d.FolderID) {
+      var destRole = effFolderRole_(u, loc.folder, idx);
+      need_(destRole === 'Admin' || destRole === 'Editor', 'You do not have permission to move the document to that folder.');
+    }
     if (d.FolderID !== loc.folder.FolderID && d.DriveFileID) {
       try {
         var target = ensureDriveFolder_(loc.folder, SHEETS.FOLDERS,
@@ -590,7 +662,7 @@ function updateDocument_(u, p) {
     updateRow_(SHEETS.DOCS, d._row, patch);
     log_(u, 'edit_doc', d.DocID);
     var fresh = readAll_(SHEETS.DOCS).filter(function (x) { return x.DocID === p.id; })[0];
-    return docOut_(u, fresh);
+    return docOut_(u, fresh, myFolderRole_(u, loc.folder));
   });
 }
 
@@ -598,7 +670,7 @@ function deleteDocument_(u, p) {
   return withLock_(function () {
     var d = readAll_(SHEETS.DOCS).filter(function (x) { return x.DocID === p.id && !bool_(x.Deleted); })[0];
     if (!d) throw err_('NOT_FOUND', 'Document not found.');
-    need_(canEditDoc_(u, d), 'You can only delete documents you created or own.');
+    need_(canEditDoc_(u, d, myFolderRole_(u, folderById_(d.FolderID) || { FolderID: d.FolderID })), 'You can only delete documents you created or own.');
     var s = stamp_();
     updateRow_(SHEETS.DOCS, d._row, { Deleted: true, UpdatedBy: u.email, UpdatedAt: safe_(s.date + ' ' + s.time) });
     log_(u, 'delete_doc', d.DocID + ' ' + d.Title);
@@ -623,7 +695,9 @@ function grantViewer_(fileId, email) {
 
 function openDocument_(u, p) {
   var d = readAll_(SHEETS.DOCS).filter(function (x) { return x.DocID === p.id; })[0];
-  if (!d || !docVisible_(u, d) || !d.DriveURL) throw err_('NOT_FOUND', 'Document not found.');
+  if (!d) throw err_('NOT_FOUND', 'Document not found.');
+  var role = myFolderRole_(u, folderById_(d.FolderID) || { FolderID: d.FolderID });
+  if (!docVisible_(u, d, role) || !d.DriveURL) throw err_('NOT_FOUND', 'Document not found.');
   var granted = grantViewer_(String(d.DriveFileID || ''), u.email);
   log_(u, 'open', d.DocID + ' ' + d.Title);
   return { url: d.DriveURL, granted: granted };
@@ -643,6 +717,71 @@ function usersOut_() {
 function listUsers_(u) {
   need_(isAdmin_(u), 'Only administrators can manage access.');
   return { users: usersOut_(), me: u.email };
+}
+
+/* ---- Folder access management (folder managers / admins) ---- */
+function canManageFolder_(u, f) { return myFolderRole_(u, f) === 'Admin'; }
+
+function folderAccessOut_(u, f) {
+  var idx = grantsIndex_()[f.FolderID] || {};
+  var names = {}; usersOut_().forEach(function (x) { names[x.email] = x.name; });
+  var grants = Object.keys(idx).map(function (em) { return { email: em, name: names[em] || '', role: idx[em].role, active: idx[em].active }; })
+    .sort(function (a, b) { return a.email.localeCompare(b.email); });
+  return { folderId: f.FolderID, nameAr: f.NameAr, nameEn: f.NameEn, access: folderAccessMode_(f), grants: grants, me: u.email, users: usersOut_() };
+}
+
+function listFolderAccess_(u, p) {
+  ensureAcl_();
+  var f = folderById_(p.folderId);
+  if (!f) throw err_('NOT_FOUND', 'Folder not found.');
+  need_(canManageFolder_(u, f), 'Only administrators or folder managers can manage folder access.');
+  return folderAccessOut_(u, f);
+}
+
+function setFolderAccess_(u, p) {
+  ensureAcl_();
+  return withLock_(function () {
+    var f = folderById_(p.folderId);
+    if (!f) throw err_('NOT_FOUND', 'Folder not found.');
+    need_(canManageFolder_(u, f), 'Only administrators or folder managers can manage folder access.');
+    var acc = p.access === 'restricted' ? 'restricted' : 'open';
+    updateRow_(SHEETS.FOLDERS, f._row, { Access: acc });
+    log_(u, 'folder_access', f.FolderID + ' → ' + acc);
+    return folderAccessOut_(u, folderById_(p.folderId));
+  });
+}
+
+function saveFolderGrant_(u, p) {
+  ensureAcl_();
+  var email = validEmail_(p.email);
+  if (!email) throw err_('VALIDATION', 'Please enter a valid e-mail address.');
+  var role = ROLES.indexOf(p.role) >= 0 ? p.role : 'Viewer';
+  var active = p.active === undefined ? true : !!p.active;
+  return withLock_(function () {
+    var f = folderById_(p.folderId);
+    if (!f) throw err_('NOT_FOUND', 'Folder not found.');
+    need_(canManageFolder_(u, f), 'Only administrators or folder managers can manage folder access.');
+    var g = readGrants_().filter(function (x) { return x.FolderID === f.FolderID && String(x.Email).toLowerCase().trim() === email; })[0];
+    if (g) updateRow_(SHEETS.GRANTS, g._row, { Role: role, Active: active });
+    else appendObj_(SHEETS.GRANTS, { GrantID: nextId_('GRT'), FolderID: f.FolderID, Email: email, Role: role, Active: active, AddedBy: u.email, AddedAt: safe_(stamp_().date) });
+    log_(u, 'grant_save', f.FolderID + ' ' + email + ' → ' + role + (active ? '' : ' (inactive)'));
+    return folderAccessOut_(u, f);
+  });
+}
+
+function deleteFolderGrant_(u, p) {
+  ensureAcl_();
+  var email = validEmail_(p.email);
+  return withLock_(function () {
+    var f = folderById_(p.folderId);
+    if (!f) throw err_('NOT_FOUND', 'Folder not found.');
+    need_(canManageFolder_(u, f), 'Only administrators or folder managers can manage folder access.');
+    var g = readGrants_().filter(function (x) { return x.FolderID === f.FolderID && String(x.Email).toLowerCase().trim() === email; })[0];
+    if (!g) throw err_('NOT_FOUND', 'Grant not found.');
+    sheet_(SHEETS.GRANTS).deleteRow(g._row);
+    log_(u, 'grant_remove', f.FolderID + ' ' + email);
+    return folderAccessOut_(u, f);
+  });
 }
 
 function listAuditLog_(u, p) {
