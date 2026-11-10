@@ -2,6 +2,13 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v2.5 — 2026-11-10
+
+- Raised the in-app upload limit from **20 MB to 40 MB** per file. A one-time migration (`ensureUploadLimit_`) bumps the stored `MaxUploadMB` on the live Config sheet from the old default; it only raises, never lowers an admin-set value, and runs once.
+- 40 MB sits just under the Apps Script POST ceiling (~50 MB, and base64 adds ~37%). For anything larger, the **Google Drive link** path is the supported route: upload to Drive, paste the share link in the Add Document form.
+- Improved oversize handling: when a chosen file exceeds the limit, the form now shows a clear bilingual hint and **auto-switches to the "Google Drive link" tab** instead of a generic error — at both file-selection and save time. Bulk upload continues to skip oversize files with a clear status.
+- Version bumped to 2.5.
+
 ## v2.4 — 2026-11-09
 
 - Added **folder-level access control** (صلاحيات مفروضة على الفولدر). Each folder now has an access mode — **عام / Open** or **مقيّد / Restricted** — and a per-folder grants list that a folder manager (or a global Admin) opens from the 🔑 button on the folder card or inside the folder.

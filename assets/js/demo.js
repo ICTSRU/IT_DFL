@@ -69,7 +69,7 @@
         switch (action) {
           case 'bootstrap':
             return resolve(JSON.parse(JSON.stringify({ user: { email: 'demo@sr.edu.sa', name: 'Demo User', role: 'Admin' },
-              config: { libraryName: 'ICTD Digital File Library', maxUploadMB: 20, defaultConf: 'Internal', version: '1.0' }, drawers: drawers, folders: folders, documents: docs })));
+              config: { libraryName: 'ICTD Digital File Library', maxUploadMB: 40, defaultConf: 'Internal', version: '2.5' }, drawers: drawers, folders: folders, documents: docs })));
           case 'addDrawer': var d = { id: nid('DRW'), nameAr: p.nameAr, nameEn: p.nameEn, icon: p.icon, color: p.color, order: drawers.length + 1, active: true, description: p.description || '' };
             drawers.push(d); return resolve(d);
           case 'updateDrawer': i = find(drawers, p.id); Object.assign(drawers[i], { nameAr: p.nameAr, nameEn: p.nameEn, icon: p.icon, color: p.color, description: p.description, active: !!p.active, order: Number(p.order) || drawers[i].order }); return resolve(drawers[i]);

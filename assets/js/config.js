@@ -1,6 +1,6 @@
 /* ICTD Digital File Library — front-end settings. Edit this file only. */
 window.ICTD_LIB_CONFIG = {
-  VERSION: "2.4",
+  VERSION: "2.5",
 
   // 1) Apps Script Web App URL (Deploy > Manage deployments > Web app URL, ends with /exec)
   WEB_APP_URL: "https://script.google.com/macros/s/AKfycbwd5bCOgpH3bN3LfjYKx5G582LjtlBZ519kc3alzaTMiZVCTl6cfyBYqqmM_WfJHEOofA/exec",
@@ -12,7 +12,7 @@ window.ICTD_LIB_CONFIG = {
   ALLOWED_DOMAIN: "sr.edu.sa",
 
   // Client-side upload limit in MB (the server enforces MaxUploadMB from the Config sheet as well)
-  MAX_UPLOAD_MB: 20,
+  MAX_UPLOAD_MB: 40,
 
   // Logos: drop the files in assets/img/ or point to the shared ICTSRU/brand library URLs.
   LOGOS: {

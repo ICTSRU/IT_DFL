@@ -1,6 +1,6 @@
 /**
  * ICTD Digital File Library — Google Apps Script backend
- * Version 2.4 (2026-11-09)
+ * Version 2.5 (2026-11-10)
  *
  * Container-bound script: create a Google Sheet, open Extensions > Apps Script,
  * paste this file as Code.gs (and appsscript.json), run setup() once, then deploy as a Web app.
@@ -12,7 +12,7 @@
  *                 then the user is looked up in AllowedUsers (Admin / Editor / Viewer).
  */
 
-var VERSION = '2.4';
+var VERSION = '2.5';
 
 /**
  * Paste your OAuth Web Client ID here. setup() / finishSetup() write it into the
@@ -54,7 +54,7 @@ var DEFAULT_CONFIG = [
   ['ClientID', 'PASTE_OAUTH_CLIENT_ID.apps.googleusercontent.com', 'Google OAuth Web Client ID (same value as GOOGLE_CLIENT_ID in assets/js/config.js)'],
   ['AllowedDomains', 'sr.edu.sa', 'Comma-separated Google Workspace domains allowed to sign in'],
   ['RestrictToAllowedList', true, 'TRUE = only users listed (and Active) in AllowedUsers may enter. FALSE = any @sr.edu.sa account enters as Viewer'],
-  ['MaxUploadMB', 20, 'Maximum upload size per file (MB). Apps Script request limit is ~50 MB; keep this at or below 30'],
+  ['MaxUploadMB', 40, 'Maximum in-app upload size per file (MB). Apps Script caps the POST body at ~50 MB and base64 adds ~37%, so keep this at or below ~40; for larger files use the Google Drive link option.'],
   ['RootFolderID', '', 'Filled automatically by setup(): the Drive folder that holds all drawers'],
   ['DefaultConfidentiality', 'Internal', 'General | Internal | Confidential']
 ];
@@ -279,6 +279,18 @@ function setConfigValue_(key, value) {
   CacheService.getScriptCache().remove('cfg_v1');
 }
 
+// One-time (v2.5): raise the stored upload cap from the old 20 MB default to 40 MB.
+// Guarded by a script property; only raises, never lowers an admin-set higher value.
+function ensureUploadLimit_() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    if (props.getProperty('upload40_done')) return;
+    var cur = Number(getConfig_().MaxUploadMB) || 0;
+    if (cur < 40) setConfigValue_('MaxUploadMB', 40);
+    props.setProperty('upload40_done', '1');
+  } catch (e) { /* non-fatal */ }
+}
+
 function stamp_() {
   var d = new Date();
   return { date: Utilities.formatDate(d, TZ, 'yyyy-MM-dd'), time: Utilities.formatDate(d, TZ, 'HH:mm:ss') };
@@ -399,6 +411,7 @@ function docOut_(u, d, role) {
 
 function bootstrap_(u, p) {
   ensureAcl_();
+  ensureUploadLimit_();
   if (p.fresh) log_(u, 'signin', '');
   var cfg = getConfig_();
   var admin = isAdmin_(u);
@@ -414,7 +427,7 @@ function bootstrap_(u, p) {
   var docs = readAll_(SHEETS.DOCS).filter(function (d) { var r = folderRole[d.FolderID]; return r != null && docVisible_(u, d, r); });
   return {
     user: { email: u.email, name: u.name, role: u.role },
-    config: { libraryName: cfg.LibraryName || 'ICTD Digital File Library', maxUploadMB: Number(cfg.MaxUploadMB) || 20,
+    config: { libraryName: cfg.LibraryName || 'ICTD Digital File Library', maxUploadMB: Number(cfg.MaxUploadMB) || 40,
       defaultConf: CONFS.indexOf(cfg.DefaultConfidentiality) >= 0 ? cfg.DefaultConfidentiality : 'Internal', version: VERSION },
     drawers: drawers.map(drawerOut_),
     folders: folders.map(function (f) { return folderOut_(f, folderRole[f.FolderID]); }),
@@ -600,10 +613,11 @@ function addDocument_(u, p) {
       var name = String(p.upload.name || 'document').replace(/[\\\/:*?"<>|]/g, '-').substring(0, 180);
       var ext = (name.split('.').pop() || '').toLowerCase();
       if (BLOCKED_EXT.indexOf(ext) >= 0) throw err_('VALIDATION', 'This file type is not allowed.');
-      var maxMB = Number(cfg.MaxUploadMB) || 20;
-      if (p.upload.data.length > maxMB * 1024 * 1024 * 1.38) throw err_('VALIDATION', 'File is larger than ' + maxMB + ' MB.');
+      var maxMB = Number(cfg.MaxUploadMB) || 40;
+      var tooBigMsg = 'File is larger than ' + maxMB + ' MB. Please upload it to Google Drive and paste the share link instead.';
+      if (p.upload.data.length > maxMB * 1024 * 1024 * 1.38) throw err_('VALIDATION', tooBigMsg);
       var bytes = Utilities.base64Decode(p.upload.data);
-      if (bytes.length > maxMB * 1024 * 1024) throw err_('VALIDATION', 'File is larger than ' + maxMB + ' MB.');
+      if (bytes.length > maxMB * 1024 * 1024) throw err_('VALIDATION', tooBigMsg);
       var blob = Utilities.newBlob(bytes, String(p.upload.mime || 'application/octet-stream'), name);
       var parent = ensureDriveFolder_(loc.folder, SHEETS.FOLDERS,
         ensureDriveFolder_(loc.drawer, SHEETS.DRAWERS, ensureRoot_(), label_(loc.drawer)), label_(loc.folder));

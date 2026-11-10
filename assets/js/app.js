@@ -493,7 +493,7 @@
     if (!d.folderId) { var ff = S.folders.filter(function (x) { return x.drawerId === d.drawerId; })[0]; d.folderId = ff ? ff.id : ''; }
     FORM = { tags: (d.tags || []).slice(), file: null, src: 'upload', editId: edit ? doc.id : '' };
     var names = {}; (CFG.TEAM_NAMES || []).concat(owners(), [S.user.name]).forEach(function (n) { if (n) names[n] = 1; });
-    var maxMB = Math.min(S.config.maxUploadMB || 20, CFG.MAX_UPLOAD_MB || 20);
+    var maxMB = Math.min(S.config.maxUploadMB || 40, CFG.MAX_UPLOAD_MB || 40);
     var body = '<form id="docform" novalidate>' +
       '<div class="field"><label class="f" for="m-title">' + esc(t('fTitle')) + ' <span class="req">*</span></label><input class="in" id="m-title" maxlength="250" value="' + esc(d.title) + '"></div>' +
       '<div class="row2"><div class="field"><label class="f" for="m-drawer">' + esc(t('fDrawer')) + ' <span class="req">*</span></label><select class="in" id="m-drawer">' +
@@ -518,6 +518,14 @@
     renderFormTags();
   }
 
+  function switchSrc(v) {
+    var el = document.querySelector('[data-act="src"][data-v="' + v + '"]'); if (!el) return;
+    FORM.src = v;
+    $$('.tabs button').forEach(function (b) { b.classList.toggle('on', b === el); });
+    var su = $('#src-upload'), sl = $('#src-link');
+    if (su) su.classList.toggle('hidden', v !== 'upload'); if (sl) sl.classList.toggle('hidden', v !== 'link');
+  }
+
   function saveDoc() {
     var err = $('#m-err'), btn = $('#m-save'); err.textContent = '';
     var p = { title: $('#m-title').value.trim(), drawerId: $('#m-drawer').value, folderId: $('#m-folder').value, date: $('#m-date').value, owner: $('#m-owner').value.trim(),
@@ -534,8 +542,8 @@
       if (FORM.src === 'upload') {
         var file = FORM.file;
         if (!file) { err.textContent = t('errNeedFile'); return; }
-        var maxMB = Math.min(S.config.maxUploadMB || 20, CFG.MAX_UPLOAD_MB || 20);
-        if (file.size > maxMB * 1048576) { err.textContent = t('errTooBig') + ' (' + maxMB + ' MB)'; return; }
+        var maxMB = Math.min(S.config.maxUploadMB || 40, CFG.MAX_UPLOAD_MB || 40);
+        if (file.size > maxMB * 1048576) { err.innerHTML = esc(t('errTooBig') + ' (' + maxMB + ' MB). ') + esc(t('tooBigHint')); switchSrc('link'); return; }
         prep = new Promise(function (res, rej) {
           var r = new FileReader(); r.onload = function () { res(String(r.result).split(',')[1] || ''); }; r.onerror = rej; r.readAsDataURL(file);
         }).then(function (b64) { p.upload = { name: file.name, mime: file.type || 'application/octet-stream', data: b64 }; });
@@ -555,7 +563,7 @@
   /* ---------------- bulk upload ---------------- */
   var BULK = { items: [] };
   function toB64(file) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(String(r.result).split(',')[1] || ''); }; r.onerror = rej; r.readAsDataURL(file); }); }
-  function bulkMaxMB() { return Math.min(S.config.maxUploadMB || 20, CFG.MAX_UPLOAD_MB || 20); }
+  function bulkMaxMB() { return Math.min(S.config.maxUploadMB || 40, CFG.MAX_UPLOAD_MB || 40); }
   function openBulkUpload(pre) {
     pre = pre || {};
     BULK = { items: [] };
@@ -930,11 +938,7 @@
     'rm-f': function (el) { var k = el.getAttribute('data-k'); if (k === 'q') { S.q = ''; $('#q').value = ''; } else S.f[k] = ''; if (k === 'drawerId') S.f.folderId = ''; renderFilters(); if (hasSearch()) renderView(); else go('#/'); },
     'tag': function (el) { closeModal(); S.f.tag = el.getAttribute('data-tag'); renderFilters(); ensureSearchView(); },
     'sort': function (el) { var k = el.getAttribute('data-k'); S.sort = { key: k, dir: S.sort.key === k ? -S.sort.dir : (k === 'date' ? -1 : 1) }; renderView(); },
-    'src': function (el) {
-      FORM.src = el.getAttribute('data-v');
-      $$('.tabs button').forEach(function (b) { b.classList.toggle('on', b === el); });
-      $('#src-upload').classList.toggle('hidden', FORM.src !== 'upload'); $('#src-link').classList.toggle('hidden', FORM.src !== 'link');
-    },
+    'src': function (el) { switchSrc(el.getAttribute('data-v')); },
     'rm-tag': function (el) { FORM.tags.splice(Number(el.getAttribute('data-i')), 1); renderFormTags(); },
     'pick-icon': function (el) { FORM.icon = el.getAttribute('data-v'); $$('#m-icons button').forEach(function (b) { b.classList.toggle('on', b === el); }); },
     'pick-color': function (el) { FORM.color = el.getAttribute('data-v'); $$('#m-colors button').forEach(function (b) { b.classList.toggle('on', b === el); }); }
@@ -980,6 +984,9 @@
   function setFile(file) {
     if (!file) return; FORM.file = file;
     var n = $('#m-fname'); if (n) n.innerHTML = icon('file-check') + ' <b><bdi>' + esc(file.name) + '</bdi></b> · ' + esc(fmtSize(file.size));
+    var maxMB = Math.min(S.config.maxUploadMB || 40, CFG.MAX_UPLOAD_MB || 40), errb = $('#m-err');
+    if (file.size > maxMB * 1048576) { if (errb) errb.innerHTML = esc(t('errTooBig') + ' (' + maxMB + ' MB). ') + esc(t('tooBigHint')); switchSrc('link'); }
+    else if (errb) errb.textContent = '';
   }
   document.addEventListener('dragover', function (e) { var d = e.target.closest && e.target.closest('#m-drop,#bk-drop'); if (d) { e.preventDefault(); d.classList.add('over'); } });
   document.addEventListener('dragleave', function (e) { var d = e.target.closest && e.target.closest('#m-drop,#bk-drop'); if (d) d.classList.remove('over'); });
