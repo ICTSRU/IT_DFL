@@ -1,6 +1,6 @@
 /**
  * ICTD Digital File Library — Google Apps Script backend
- * Version 2.5 (2026-11-10)
+ * Version 2.6 (2026-11-10)
  *
  * Container-bound script: create a Google Sheet, open Extensions > Apps Script,
  * paste this file as Code.gs (and appsscript.json), run setup() once, then deploy as a Web app.
@@ -12,7 +12,7 @@
  *                 then the user is looked up in AllowedUsers (Admin / Editor / Viewer).
  */
 
-var VERSION = '2.5';
+var VERSION = '2.6';
 
 /**
  * Paste your OAuth Web Client ID here. setup() / finishSetup() write it into the
@@ -119,6 +119,7 @@ var ACTIONS = {
   saveUser: saveUser_,
   deleteUser: deleteUser_,
   auditLog: listAuditLog_,
+  importDriveFolder: importDriveFolder_,
   listFolderAccess: listFolderAccess_,
   setFolderAccess: setFolderAccess_,
   saveFolderGrant: saveFolderGrant_,
@@ -601,6 +602,12 @@ function fileIdFromUrl_(url) {
   return m ? m[1] : '';
 }
 
+function folderIdFromUrl_(s) {
+  s = String(s || '').trim();
+  var m = s.match(/\/folders\/([\w-]{15,})/) || s.match(/[?&]id=([\w-]{15,})/) || s.match(/^([\w-]{15,})$/);
+  return m ? m[1] : '';
+}
+
 function addDocument_(u, p) {
   var v = validateDocFields_(p);
   return withLock_(function () {
@@ -644,6 +651,55 @@ function addDocument_(u, p) {
     row.Title = v.title; row.DocDate = v.date; row.Owner = v.owner; row.Tags = v.tags; row.Description = v.description;
     row.Version = v.version; row.FileName = fileName; row.MimeType = mime; row.CreatedAt = s.date + ' ' + s.time;
     return docOut_(u, row, role);
+  });
+}
+
+// Bulk-index every file already sitting in a Google Drive folder into a library folder,
+// by reference (link) — files are not moved or copied. Idempotent: skips files already indexed here.
+function importDriveFolder_(u, p) {
+  var driveId = folderIdFromUrl_(p.driveUrl);
+  if (!driveId) throw err_('VALIDATION', 'Please paste a valid Google Drive folder link.');
+  return withLock_(function () {
+    var loc = resolveFolder_(p);
+    var role = myFolderRole_(u, loc.folder);
+    need_(role === 'Admin' || role === 'Editor', 'You do not have permission to add documents to this folder.');
+    var src;
+    try { src = DriveApp.getFolderById(driveId); }
+    catch (e) { throw err_('NOT_FOUND', 'Could not open that Drive folder. Check the link and make sure the library account has access to it.'); }
+    var cfg = getConfig_();
+    var defConf = CONFS.indexOf(cfg.DefaultConfidentiality) >= 0 ? cfg.DefaultConfidentiality : 'Internal';
+    var existing = {};
+    readAll_(SHEETS.DOCS).forEach(function (d) {
+      if (!bool_(d.Deleted) && d.FolderID === loc.folder.FolderID && d.DriveFileID) existing[String(d.DriveFileID)] = true;
+    });
+    var owner = (u.name || u.email).substring(0, 100);
+    var s = stamp_();
+    var added = [], skipped = 0, blocked = 0, guard = 0;
+    var it = src.getFiles();
+    while (it.hasNext() && guard < 400) {
+      guard++;
+      var f = it.next();
+      var fid = f.getId();
+      if (existing[fid]) { skipped++; continue; }
+      var name = String(f.getName() || 'file');
+      var ext = (name.split('.').pop() || '').toLowerCase();
+      if (BLOCKED_EXT.indexOf(ext) >= 0) { blocked++; continue; }
+      var dt; try { dt = Utilities.formatDate(f.getLastUpdated() || new Date(), TZ, 'yyyy-MM-dd'); } catch (e2) { dt = s.date; }
+      var id = nextId_('DOC');
+      var row = {
+        DocID: id, Title: safe_(name.substring(0, 250)), DrawerID: loc.drawer.DrawerID, FolderID: loc.folder.FolderID,
+        DocDate: safe_(dt), Owner: safe_(owner), OwnerEmail: u.email, Tags: '', Description: '',
+        Version: '1.0', Status: 'Active', Confidentiality: defConf, FileName: safe_(name.substring(0, 180)),
+        MimeType: safe_(String(f.getMimeType() || '')), SizeBytes: Number(f.getSize()) || 0, DriveFileID: fid, DriveURL: f.getUrl(),
+        CreatedBy: u.email, CreatedAt: safe_(s.date + ' ' + s.time), UpdatedBy: '', UpdatedAt: '', Deleted: false
+      };
+      appendObj_(SHEETS.DOCS, row);
+      existing[fid] = true;
+      row.Title = name; row.FileName = name; row.DocDate = dt; row.Owner = owner; row.Tags = ''; row.CreatedAt = s.date + ' ' + s.time;
+      added.push(docOut_(u, row, role));
+    }
+    log_(u, 'import_drive', loc.folder.FolderID + ' +' + added.length + (skipped ? ' (skip ' + skipped + ')' : '') + (blocked ? ' (blocked ' + blocked + ')' : ''));
+    return { imported: added.length, skipped: skipped, blocked: blocked, more: it.hasNext(), docs: added, folderId: loc.folder.FolderID };
   });
 }
 

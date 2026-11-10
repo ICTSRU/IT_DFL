@@ -69,7 +69,7 @@
         switch (action) {
           case 'bootstrap':
             return resolve(JSON.parse(JSON.stringify({ user: { email: 'demo@sr.edu.sa', name: 'Demo User', role: 'Admin' },
-              config: { libraryName: 'ICTD Digital File Library', maxUploadMB: 40, defaultConf: 'Internal', version: '2.5' }, drawers: drawers, folders: folders, documents: docs })));
+              config: { libraryName: 'ICTD Digital File Library', maxUploadMB: 40, defaultConf: 'Internal', version: '2.6' }, drawers: drawers, folders: folders, documents: docs })));
           case 'addDrawer': var d = { id: nid('DRW'), nameAr: p.nameAr, nameEn: p.nameEn, icon: p.icon, color: p.color, order: drawers.length + 1, active: true, description: p.description || '' };
             drawers.push(d); return resolve(d);
           case 'updateDrawer': i = find(drawers, p.id); Object.assign(drawers[i], { nameAr: p.nameAr, nameEn: p.nameEn, icon: p.icon, color: p.color, description: p.description, active: !!p.active, order: Number(p.order) || drawers[i].order }); return resolve(drawers[i]);
@@ -115,6 +115,18 @@
           case 'deleteUser': {
             DEMO_USERS = DEMO_USERS.filter(function (x) { return x.email !== String(p.email || '').toLowerCase().trim(); });
             return resolve({ users: DEMO_USERS.slice(), me: 'demo@sr.edu.sa' });
+          }
+          case 'importDriveFolder': {
+            if (!/drive\.google\.com|^[\w-]{15,}$/.test(String(p.driveUrl || ''))) return reject({ code: 'VALIDATION', message: 'Please paste a valid Google Drive folder link.' });
+            var fx = find(folders, p.folderId); if (fx < 0) return reject({ code: 'NOT_FOUND', message: 'Folder not found.' });
+            var sample = [['العرض الرئيسي 03.mp4', 497200000], ['موشن جامعة سليمان الراجحي – نهائي.mp4', 44150000]];
+            var made = sample.map(function (sm) {
+              var nd = { id: nid('DOC'), title: sm[0], drawerId: folders[fx].drawerId, folderId: p.folderId, date: today(1), owner: 'Demo User', ownerEmail: 'demo@sr.edu.sa',
+                tags: [], description: '', version: '1.0', status: 'Active', conf: 'Internal', fileName: sm[0], mime: 'video/mp4', size: sm[1],
+                hasFile: true, createdBy: 'demo@sr.edu.sa', createdAt: today(0), updatedBy: '', updatedAt: '', canEdit: true };
+              docs.push(nd); return nd;
+            });
+            return resolve(JSON.parse(JSON.stringify({ imported: made.length, skipped: 0, blocked: 0, more: false, docs: made, folderId: p.folderId })));
           }
           case 'listFolderAccess':
           case 'setFolderAccess':

@@ -349,3 +349,8 @@ table.autbl td{font-size:13px}
 :root[data-theme="dark"] .seg button{background:var(--surface);color:#c9b8ec}
 :root[data-theme="dark"] .seg button.on{background:var(--purple);color:#fff}
 :root[data-theme="dark"] .manila .key,:root[data-theme="dark"] .manila .pen,:root[data-theme="dark"] .manila .del2{background:#f4e3b0;color:#4a3b12}
+
+/* ---- Import from Drive folder (v2.6) ---- */
+.imp-done{display:flex;align-items:center;gap:8px;margin:12px 0 2px;padding:10px 12px;border-radius:10px;background:var(--ok-light,#e7f6ec);color:var(--ok,#1f7a44);font-weight:600;font-size:13.5px}
+.imp-done .ic{width:18px;height:18px;flex:0 0 auto}
+:root[data-theme="dark"] .imp-done{background:#16301f;color:#7fd79b}

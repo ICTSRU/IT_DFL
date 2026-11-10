@@ -403,6 +403,7 @@
     return crumbs([[t('cabinet'), '#/'], [nm(d), '#/d/' + d.id], [nm(f), '']]) +
       '<div class="page-head"><h2>' + icon('folder-open') + ' <bdi>' + esc(nm(f)) + '</bdi></h2><span class="chip" style="background:var(--purple-light);color:var(--purple);border-color:var(--border)">' + esc(cntLabel(list.length)) + '</span>' +
       (f.access === 'restricted' ? '<span class="chip lockchip">' + icon('lock') + esc(t('accRestricted')) + '</span>' : '') + '<span class="grow"></span>' +
+      (fEdit(f) ? '<button class="btn secondary" data-act="import-drive" data-drawer="' + esc(d.id) + '" data-folder="' + esc(id) + '">' + icon('folder-symlink') + esc(t('importDrive')) + '</button>' : '') +
       (fEdit(f) ? '<button class="btn secondary" data-act="bulk-upload" data-drawer="' + esc(d.id) + '" data-folder="' + esc(id) + '">' + icon('upload') + esc(t('bulkUpload')) + '</button>' : '') +
       (fEdit(f) ? '<button class="btn" data-act="add-doc" data-drawer="' + esc(d.id) + '" data-folder="' + esc(id) + '">' + icon('file-plus') + esc(t('addDoc')) + '</button>' : '') +
       (fManage(f) ? '<button class="btn secondary" data-act="folder-access" data-id="' + esc(id) + '">' + icon('key-round') + esc(t('folderAccess')) + '</button>' : '') +
@@ -579,6 +580,40 @@
     var foot = '<button class="btn secondary" data-act="close-modal">' + esc(t('close')) + '</button><button class="btn" id="bk-go" data-act="bulk-go" disabled>' + icon('upload') + esc(t('uploadAll')) + '</button>';
     modal(t('bulkTitle'), body, foot, { sticky: true, focus: false, cls: 'wide' });
   }
+
+  /* ---------------- import from Drive folder ---------------- */
+  function openImportDrive(pre) {
+    pre = pre || {};
+    var drawerId = pre.drawerId || (S.drawers[0] && S.drawers[0].id) || '';
+    var folderId = pre.folderId || '';
+    if (!folderId) { var ff = S.folders.filter(function (x) { return x.drawerId === drawerId; })[0]; folderId = ff ? ff.id : ''; }
+    var body = '<p class="hint" style="margin:0 0 12px">' + esc(t('importDriveHelp')) + '</p>' +
+      '<div class="row2"><div class="field"><label class="f" for="im-drawer">' + esc(t('fDrawer')) + '</label><select class="in" id="im-drawer">' +
+      S.drawers.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === drawerId ? ' selected' : '') + '>' + esc(nm(x)) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><label class="f" for="im-folder">' + esc(t('fFolder')) + '</label><select class="in" id="im-folder">' + folderOptions(drawerId, folderId) + '</select></div></div>' +
+      '<div class="field"><label class="f" for="im-url">' + esc(t('importDriveUrl')) + '</label><input class="in latin" id="im-url" placeholder="https://drive.google.com/drive/folders/…"></div>' +
+      '<p class="hint" style="margin:-4px 0 8px;font-size:12.5px">' + esc(t('importAccessNote')) + '</p>' +
+      '<div id="im-result"></div><div class="err" id="im-err" role="alert"></div>';
+    var foot = '<button class="btn secondary" data-act="close-modal">' + esc(t('close')) + '</button>' +
+      '<button class="btn" id="im-go" data-act="do-import">' + icon('folder-symlink') + esc(t('importBtn')) + '</button>';
+    modal(t('importDrive'), body, foot, { sticky: true, focus: false });
+  }
+  function doImportDrive() {
+    var err = $('#im-err'), btn = $('#im-go'), res = $('#im-result'); err.textContent = '';
+    var drawerId = $('#im-drawer').value, folderId = $('#im-folder').value, url = $('#im-url').value.trim();
+    if (!folderId) { err.textContent = t('errRequired'); return; }
+    if (!url) { err.textContent = t('errRequired'); return; }
+    btn.disabled = true; btn.innerHTML = icon('loader-circle', 'spin') + esc(t('importing'));
+    api('importDriveFolder', { drawerId: drawerId, folderId: folderId, driveUrl: url }).then(function (r) {
+      (r.docs || []).forEach(function (doc) { if (!S.docs.some(function (x) { return x.id === doc.id; })) S.docs.push(doc); });
+      reindex(); renderFilters(); renderView();
+      var msg = t('importResult').replace('{n}', r.imported).replace('{s}', r.skipped).replace('{b}', r.blocked);
+      res.innerHTML = '<div class="imp-done">' + icon('circle-check') + ' <span>' + esc(msg) + (r.more ? ' · ' + esc(t('importMore')) : '') + '</span></div>';
+      btn.disabled = false; btn.innerHTML = icon('folder-symlink') + esc(t('importBtn'));
+      toast(t('importResultShort').replace('{n}', r.imported));
+    }).catch(function (e) { btn.disabled = false; btn.innerHTML = icon('folder-symlink') + esc(t('importBtn')); handleErr(e, err); });
+  }
+
   function addBulkFiles(list) {
     if (!list) return;
     var maxMB = bulkMaxMB(), names = {}; (CFG.TEAM_NAMES || []).concat([S.user.name]).forEach(function (n) { if (n) names[n] = 1; });
@@ -807,7 +842,7 @@
   /* ---------------- audit log (Admin) ---------------- */
   var AUDIT = { rows: [], filter: '' };
   function actionLabel(a) { var k = 'act_' + String(a || '').trim(); var v = t(k); return v === k ? (a || '') : v; }
-  function actionClass(a) { a = String(a || ''); if (a.indexOf('delete') >= 0 || a === 'denied' || a === 'grant_remove') return 'bad'; if (a.indexOf('add') >= 0 || a === 'import_policies') return 'ok'; if (a.indexOf('edit') >= 0 || a === 'save_user' || a === 'grant_save' || a === 'folder_access') return 'warn'; return 'info'; }
+  function actionClass(a) { a = String(a || ''); if (a.indexOf('delete') >= 0 || a === 'denied' || a === 'grant_remove') return 'bad'; if (a.indexOf('add') >= 0 || a.indexOf('import') >= 0) return 'ok'; if (a.indexOf('edit') >= 0 || a === 'save_user' || a === 'grant_save' || a === 'folder_access') return 'warn'; return 'info'; }
   function openAuditLog() {
     AUDIT = { rows: [], filter: '' };
     modal(t('auditTitle'),
@@ -922,6 +957,8 @@
     'save-drawer': saveDrawer, 'save-folder': saveFolder,
     'add-doc': function (el) { openDocForm(null, { drawerId: el.getAttribute('data-drawer') || '', folderId: el.getAttribute('data-folder') || '' }); },
     'bulk-upload': function (el) { openBulkUpload({ drawerId: el.getAttribute('data-drawer') || '', folderId: el.getAttribute('data-folder') || '' }); },
+    'import-drive': function (el) { openImportDrive({ drawerId: el.getAttribute('data-drawer') || '', folderId: el.getAttribute('data-folder') || '' }); },
+    'do-import': function () { doImportDrive(); },
     'bulk-del': function (el) { BULK.items.splice(Number(el.getAttribute('data-i')), 1); renderBulkRows(); },
     'bulk-go': startBulkUpload,
     'edit-doc': function (el) { var d = docById(el.getAttribute('data-id')); if (d) openDocForm(d); },
@@ -973,6 +1010,7 @@
     var id = e.target.id;
     if (id === 'm-drawer') { var fs = $('#m-folder'); fs.innerHTML = folderOptions(e.target.value, ''); return; }
     if (id === 'bk-drawer') { var bf = $('#bk-folder'); if (bf) bf.innerHTML = folderOptions(e.target.value, ''); return; }
+    if (id === 'im-drawer') { var imf = $('#im-folder'); if (imf) imf.innerHTML = folderOptions(e.target.value, ''); return; }
     if (id === 'bk-file') { addBulkFiles(e.target.files); e.target.value = ''; return; }
     if (id === 'm-file') { setFile(e.target.files && e.target.files[0]); return; }
     var map = { 'f-drawer': 'drawerId', 'f-folder': 'folderId', 'f-owner': 'owner', 'f-tag': 'tag', 'f-from': 'from', 'f-to': 'to', 'f-status': 'status', 'f-conf': 'conf' };

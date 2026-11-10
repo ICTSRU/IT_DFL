@@ -2,6 +2,15 @@
 
 Version numbers use one digit after the decimal point (… 1.9 → 2.0).
 
+## v2.6 — 2026-11-10
+
+- Added **Import from Drive folder** (استيراد من مجلد Drive) for admins / folder managers (Add/Editor rights on the target folder). Paste a Google Drive folder link and every file already in it is indexed into the chosen library folder **by reference** — files are not moved or copied, so there is no size limit (handles the 474 MB+ videos).
+  - Idempotent: files already indexed in that folder are skipped, so re-running after adding more files only imports the new ones. Blocked file types are skipped and counted.
+  - Each imported file becomes a normal document (title from filename, Drive date, size, type, link); the result shows imported / skipped / not-allowed counts, and flags when more than one batch (>400 files) remains.
+  - Button sits in the folder header next to Bulk upload; logs an `import_drive` entry to the Audit Log.
+- **Access reminder:** imported files stay where they are in Drive and keep their own sharing — the library account needs access to the folder, and the files must be shared with your users for them to open.
+- Version bumped to 2.6.
+
 ## v2.5 — 2026-11-10
 
 - Raised the in-app upload limit from **20 MB to 40 MB** per file. A one-time migration (`ensureUploadLimit_`) bumps the stored `MaxUploadMB` on the live Config sheet from the old default; it only raises, never lowers an admin-set value, and runs once.
